@@ -55,7 +55,19 @@ describe('diff (old -> new DSL, per-script ops)', () => {
             {type: 'replace', index: 1, script: newS[1]}
         ]);
     });
+
+    test('numeric args equal their string form (LLM may return numbers as strings)', () => {
+        // decompile() coerces numeric fields to Number; an LLM often emits "10".
+        // diff must treat these as the same script, or every edit degrades to replace.
+        const oldS = [flag([['move', 10], ['say', 'hi']])];
+        const newS = [flag([['move', '10'], ['say', 'hi']])];
+        expect(diff(oldS, newS)).toEqual([{type: 'keep', index: 0}]);
+    });
 });
+
+// Compare script arrays ignoring order (scratch scripts are position-anchored;
+// applyEdit preserves block identity + x/y, not _scripts array order).
+const asSet = scripts => scripts.map(s => JSON.stringify(s)).sort();
 
 describe('applyEdit (headless real scratch-vm)', () => {
     test('no-op edit leaves every block id untouched', async () => {
@@ -100,6 +112,22 @@ describe('applyEdit (headless real scratch-vm)', () => {
         // Every id of the untouched script still exists, byte-for-byte.
         keptIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined());
         expect(decompile(target.blocks)).toEqual(newD);
+    });
+
+    test('replacing the FIRST of two scripts still preserves the untouched second', async () => {
+        // Regression: rebuilt scripts append to _scripts, so array order may differ
+        // from newScripts. Identity + position of the untouched script must survive.
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [flag([['move', 10]]), flag([['say', 'keep']])]);
+        const keptHatId = scriptHatIds(target.blocks)[1];
+        const keptIds = reachableIds(target.blocks, keptHatId);
+
+        const oldD = decompile(target.blocks);
+        const newD = [flag([['move', 99]]), flag([['say', 'keep']])];
+        await applyEdit(vm, oldD, newD);
+
+        keptIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined());
+        expect(asSet(decompile(target.blocks))).toEqual(asSet(newD));
     });
 
     test('an added script appears and a removed script disappears', async () => {

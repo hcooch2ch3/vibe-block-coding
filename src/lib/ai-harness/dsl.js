@@ -91,6 +91,20 @@ export const compile = function (scripts) {
 // 숫자꼴 문자열은 Number 로, 그 외는 문자열 그대로 (필드 값 역변환).
 const coerce = v => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v);
 
+/**
+ * DSL 스크립트의 body 인자를 decompile 과 동일하게 coerce 해 정규화한다.
+ * LLM 은 숫자를 "10" 처럼 문자열로 돌려주기도 하는데, decompile 결과와 같은 공간에
+ * 놓아야 diff 가 의미 비교(값이 같으면 동일)를 할 수 있다.
+ * @param {object} script - {hat, body} DSL 스크립트
+ * @returns {object} 인자가 coerce 된 새 스크립트
+ */
+export const normalizeScript = function (script) {
+    return {
+        hat: script.hat,
+        body: script.body.map(([op, ...args]) => [op, ...args.map(coerce)])
+    };
+};
+
 // 블록 하나를 DSL 스텝(['name', ...args])으로 역변환.
 const decompileBlock = function (blocks, block) {
     const entry = REV[block.opcode];

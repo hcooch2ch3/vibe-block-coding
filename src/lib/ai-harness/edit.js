@@ -13,10 +13,12 @@
  * 배열 위치(index) 기반 — 재정렬/중복 hat 은 "전부 바뀜"으로 degrade 한다.
  */
 
-import {compileScript, scriptHatIds} from './dsl';
+import {compileScript, scriptHatIds, normalizeScript} from './dsl';
 
-// 두 DSL 스크립트가 의미상 같은지(hat + body 전체) 깊은 비교.
-const sameScript = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// 두 DSL 스크립트가 의미상 같은지 비교. 인자를 decompile 과 같은 공간으로 정규화한 뒤
+// 비교하므로 LLM 이 숫자를 "10" 문자열로 돌려줘도 값이 같으면 동일로 본다.
+const sameScript = (a, b) =>
+    JSON.stringify(normalizeScript(a)) === JSON.stringify(normalizeScript(b));
 
 /**
  * 옛/새 DSL 스크립트 배열을 위치 기반으로 비교해 연산 목록을 만든다.
