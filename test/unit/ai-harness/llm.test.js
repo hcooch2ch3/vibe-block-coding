@@ -62,6 +62,12 @@ describe('parseDSL', () => {
     test('throws when there is no JSON at all', () => {
         expect(() => parseDSL('I cannot help with that.')).toThrow();
     });
+
+    test('throws when a step omits its required args (would compile to "undefined")', () => {
+        // LLMs sometimes drop args; compile would then String(undefined) a block value.
+        expect(() => parseDSL('[{"hat":"when_flag","body":[["move"]]}]')).toThrow(/move/);
+        expect(() => parseDSL('[{"hat":"when_flag","body":[["say"]]}]')).toThrow(/say/);
+    });
 });
 
 describe('requestScripts (fetch injected)', () => {

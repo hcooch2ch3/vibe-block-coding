@@ -82,8 +82,12 @@ export const parseDSL = function (text) {
         if (!script || !OPMAP[script.hat]) {
             throw new Error(`미지원 hat: ${script && script.hat}`);
         }
-        (script.body || []).forEach(([op]) => {
-            if (!OPMAP[op]) throw new Error(`미지원 opcode: ${op}`);
+        (script.body || []).forEach(([op, ...args]) => {
+            const spec = OPMAP[op];
+            if (!spec) throw new Error(`미지원 opcode: ${op}`);
+            if (args.length !== spec.inputs.length) {
+                throw new Error(`${op}: 인자 ${spec.inputs.length}개 필요, ${args.length}개 받음`);
+            }
         });
     });
     return scripts;
