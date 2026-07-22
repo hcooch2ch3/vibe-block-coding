@@ -113,4 +113,5 @@ const mapStateToProps = state => ({
     vm: state.scratchGui.vm
 });
 
+export {VibePrompt as VibePromptContainer};
 export default connect(mapStateToProps)(VibePrompt);
