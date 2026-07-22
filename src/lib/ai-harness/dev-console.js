@@ -15,12 +15,13 @@ import {applyEdit} from './edit';
 /**
  * 자연어 지시로 블록을 새로 만들어 현재 편집 대상에 심고, 결과 DSL 을 돌려준다.
  * @param {VirtualMachine} vm - editingTarget 에 블록을 심음
- * @param {object} opts - {apiKey, instruction, model?}
+ * @param {object} opts - {apiKey, instruction, model?, targetId?}
  * @param {Function} fetchImpl - 주입용 fetch (생략 시 전역 fetch)
  * @returns {Promise<Array<object>>} 심은 뒤 decompile 한 DSL 스크립트 배열
  */
 export const generate = async function (vm, opts, fetchImpl) {
-    const target = vm.editingTarget;
+    const target = opts.targetId ? vm.runtime.getTargetById(opts.targetId) : vm.editingTarget;
+    if (!target) throw new Error('generate: pinned target no longer exists');
     const scripts = await requestScripts(
         {apiKey: opts.apiKey, model: opts.model, instruction: opts.instruction},
         fetchImpl
@@ -33,12 +34,13 @@ export const generate = async function (vm, opts, fetchImpl) {
 /**
  * 현재 프로그램을 LLM 에게 보여주고 자연어 지시로 수정한 뒤 변경분만 주입한다.
  * @param {VirtualMachine} vm - editingTarget 을 수정
- * @param {object} opts - {apiKey, instruction, model?}
+ * @param {object} opts - {apiKey, instruction, model?, targetId?}
  * @param {Function} fetchImpl - 주입용 fetch (생략 시 전역 fetch)
  * @returns {Promise<Array<object>>} 수정 뒤 decompile 한 DSL 스크립트 배열
  */
 export const edit = async function (vm, opts, fetchImpl) {
-    const target = vm.editingTarget;
+    const target = opts.targetId ? vm.runtime.getTargetById(opts.targetId) : vm.editingTarget;
+    if (!target) throw new Error('edit: pinned target no longer exists');
     const current = decompile(target.blocks);
     const scripts = await requestScripts(
         {
@@ -49,7 +51,7 @@ export const edit = async function (vm, opts, fetchImpl) {
         },
         fetchImpl
     );
-    await applyEdit(vm, current, scripts);
+    await applyEdit(vm, current, scripts, target.id);
     return decompile(target.blocks);
 };
 

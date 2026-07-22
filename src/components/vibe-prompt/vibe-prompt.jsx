@@ -45,6 +45,11 @@ const messages = defineMessages({
         id: 'vibe.prompt.error',
         defaultMessage: 'Oops, that did not work. Want to try again?',
         description: 'Friendly error message when a request fails'
+    },
+    saveKeyError: {
+        id: 'vibe.prompt.saveKeyError',
+        defaultMessage: 'Could not save your key in this browser. Try again?',
+        description: 'Shown when the API key could not be written to storage'
     }
 });
 
@@ -85,6 +90,14 @@ const VibePromptComponent = props => {
                 <div className={styles.notice}>
                     {intl.formatMessage(messages.keyNotice)}
                 </div>
+                {error && (
+                    <div
+                        className={classNames(styles.status, styles.error)}
+                        role="alert"
+                    >
+                        {intl.formatMessage(messages.saveKeyError)}
+                    </div>
+                )}
             </div>
         );
     }

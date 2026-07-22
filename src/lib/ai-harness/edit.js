@@ -62,13 +62,19 @@ const placeAt = function (compiled, x, y) {
  * 주의: 프로젝트가 실행 중이면 먼저 멈추고 호출할 것(deleteBlock 은 도는 스레드를
  * 정리하지 않음 — scratch-vm 의 @todo).
  *
- * @param {VirtualMachine} vm - editingTarget 에 편집을 적용
+ * @param {VirtualMachine} vm - 편집을 적용할 vm
  * @param {Array<object>} oldScripts - 편집 전 DSL (decompile(현재 블록) 결과)
  * @param {Array<object>} newScripts - LLM 이 돌려준 수정본 DSL
+ * @param {string} [targetId] - 편집할 스프라이트 id. 요청 중 스프라이트 전환이
+ *   있어도 이 타깃에 고정 적용(생략 시 현재 editingTarget — 콘솔 스모크 하위호환).
  * @returns {Promise<Array>} 적용한 연산 목록(diff 결과)
  */
-export const applyEdit = async function (vm, oldScripts, newScripts) {
-    const target = vm.editingTarget;
+export const applyEdit = async function (vm, oldScripts, newScripts, targetId) {
+    // 고정된 targetId 가 있는데 그 스프라이트가 (요청 중 삭제로) 사라졌으면 fail-closed:
+    // editingTarget 로 폴백하지 않고 던진다 → 다른 스프라이트 오염 방지. targetId 없으면
+    // 현재 editingTarget(콘솔 스모크 하위호환).
+    const target = targetId ? vm.runtime.getTargetById(targetId) : vm.editingTarget;
+    if (!target) throw new Error('applyEdit: pinned target no longer exists');
     const blocks = target.blocks;
     const ops = diff(oldScripts, newScripts);
     // oldScripts 와 인덱스가 일치하는 hat id 스냅샷 — 삭제로 순서가 흔들려도 id 로 짚는다.
