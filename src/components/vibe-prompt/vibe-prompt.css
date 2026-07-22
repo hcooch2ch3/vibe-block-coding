@@ -1,6 +1,9 @@
 .vibe-prompt {
     display: flex;
     flex-direction: column;
+    /* flex item of stageAndTargetWrapper: reserve our own height so the
+       flex-grow:1 target-wrapper above cannot collapse us to 0px. */
+    flex-shrink: 0;
     padding: 0.5rem;
     margin-top: 0.5rem;
     background: #e9f1fc;
