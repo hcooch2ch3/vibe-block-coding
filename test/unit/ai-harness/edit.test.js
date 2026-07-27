@@ -145,3 +145,83 @@ describe('applyEdit (headless real scratch-vm)', () => {
         expect(decompile(target.blocks)).toEqual([flag([['move', 10]])]);
     });
 });
+
+describe('substack editing', () => {
+    test('string vs number inside a loop is a no-op (keep, ids unchanged)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [flag([['repeat', 3, [['move', 10]]]])]);
+        const before = decompile(target.blocks);
+        const beforeHatId = scriptHatIds(target.blocks)[0];
+        // same program but numbers as strings (as an LLM might return)
+        const asStrings = [{hat: 'when_flag', body: [['repeat', '3', [['move', '10']]]]}];
+        await applyEdit(vm, before, asStrings);
+        expect(scriptHatIds(target.blocks)[0]).toBe(beforeHatId); // not rebuilt
+        expect(decompile(target.blocks)).toEqual(before);
+    });
+    test('editing inside a loop rebuilds only that script; sibling + no leak', async () => {
+        // applyEdit deletes+re-shares the replaced script, so rebuilt scripts APPEND
+        // to _scripts — array order differs. Assert order-insensitively (asSet) and
+        // check the sibling by id (reachableIds), like the FIRST-of-two test above.
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [
+            flag([['repeat', 3, [['move', 10]]]]),
+            {hat: 'when_clicked', body: [['say', 'hi']]}
+        ]);
+        const before = decompile(target.blocks);
+        const siblingHatId = scriptHatIds(target.blocks)[1];
+        const keptIds = reachableIds(target.blocks, siblingHatId);
+        const replacedHatId = scriptHatIds(target.blocks)[0];
+        const replacedIds = reachableIds(target.blocks, replacedHatId);
+        const edited = [
+            {hat: 'when_flag', body: [['repeat', 3, [['move', 10], ['turn', 15]]]]},
+            before[1]
+        ];
+        await applyEdit(vm, before, edited);
+        keptIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined()); // sibling survives
+        replacedIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined()); // old loop body gone
+        expect(asSet(decompile(target.blocks))).toEqual(asSet(edited));
+    });
+    test('a flat script edited into a loop leaves no orphan blocks', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [flag([['move', 10]])]);
+        const before = decompile(target.blocks);
+        const oldIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[0]);
+        const edited = [flag([['repeat', 3, [['move', 10]]]])];
+        await applyEdit(vm, before, edited);
+        oldIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined()); // old flat blocks gone
+        expect(asSet(decompile(target.blocks))).toEqual(asSet(edited));
+    });
+    test('a loop script edited back to flat removes the substack blocks', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [flag([['repeat', 3, [['move', 10], ['turn', 15]]]])]);
+        const before = decompile(target.blocks);
+        const oldIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[0]);
+        const edited = [flag([['move', 10]])];
+        await applyEdit(vm, before, edited);
+        oldIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined()); // loop + body gone
+        expect(asSet(decompile(target.blocks))).toEqual(asSet(edited));
+    });
+    test('removing a trailing loop script deletes its substack; sibling survives', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [
+            {hat: 'when_clicked', body: [['say', 'hi']]},
+            flag([['repeat', 3, [['move', 10]]]])
+        ]);
+        const before = decompile(target.blocks);
+        const siblingIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[0]); // say (index 0, kept)
+        const removedIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[1]); // repeat (index 1, removed)
+        await applyEdit(vm, before, [before[0]]); // drop the trailing repeat
+        removedIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined()); // repeat + substack gone
+        siblingIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined()); // say kept (keep op)
+        expect(decompile(target.blocks)).toEqual([before[0]]);
+    });
+    test('a forever script edit round-trips through applyEdit as a no-op', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [flag([['forever', [['move', 10]]]])]);
+        const before = decompile(target.blocks);
+        const beforeHatId = scriptHatIds(target.blocks)[0];
+        await applyEdit(vm, before, [{hat: 'when_flag', body: [['forever', [['move', '10']]]]}]);
+        expect(scriptHatIds(target.blocks)[0]).toBe(beforeHatId); // keep, not rebuilt
+        expect(decompile(target.blocks)).toEqual(before);
+    });
+});
