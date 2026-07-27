@@ -1,0 +1,46 @@
+name: Vibe AI harness
+
+# Focused CI for the Vibe Block Coding contribution (src/lib/ai-harness + the
+# prompt-panel UI). Runs on every branch push and PR: lint + unit tests for our
+# code, plus a build smoke-check that the app bundle still compiles with our
+# changes. The upstream scratch-gui CI/CD workflow only triggers on
+# master/develop/PRs and needs deploy secrets, so this keeps a fast, always-green
+# signal scoped to what we actually own.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint + unit tests + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-node@26961cf329f22f6837d5f54c3efd76b480300ace # v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (ai-harness + prompt UI)
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
+        run: npx eslint --ext .js,.jsx src/lib/ai-harness src/components/vibe-prompt src/containers/vibe-prompt.jsx
+      - name: Unit tests (ai-harness)
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
+        run: npx jest test/unit/ai-harness --maxWorkers=2
+      - name: Build (smoke-check the bundle compiles)
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider --max-old-space-size=4096
+        run: npm run build
