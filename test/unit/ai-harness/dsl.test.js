@@ -44,3 +44,22 @@ describe('scriptHatIds', () => {
         });
     });
 });
+
+describe('Tier A flat opcode additions', () => {
+    test('multi-input and no-input flat blocks round-trip', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([
+            ['goto', 0, 0], ['set_x', -100], ['change_x', 5], ['change_y', 20], ['set_y', -50],
+            ['think', 'hmm'], ['think_secs', 'hmm', 3], ['say_secs', 'hi', 2],
+            ['set_size', 150], ['change_size', -10], ['show'], ['hide'], ['next_costume'], ['wait', 1]
+        ])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('when_clicked is a supported hat', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [{hat: 'when_clicked', body: [['move', 10]]}];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+});

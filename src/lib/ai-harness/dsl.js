@@ -13,12 +13,42 @@
 
 // DSL 이름 → {opcode, hat?, inputs:[{name, shadow, field}]}
 // inputs 는 값 입력마다 생성할 shadow 블록 명세.
+// shadow 는 vm 실행뿐 아니라 에디터에 뜨는 입력 위젯 종류도 결정하므로(예:
+// math_positive_number = 음수 못 넣는 칸), 런타임 수용값이 아니라 아이에게 보이는
+// scratch-blocks 위젯에 맞춰야 한다. (왕복 테스트는 이 위젯 차이를 못 잡음.)
 export const OPMAP = {
     when_flag: {opcode: 'event_whenflagclicked', hat: true, inputs: []},
+    when_clicked: {opcode: 'event_whenthisspriteclicked', hat: true, inputs: []},
     move: {opcode: 'motion_movesteps', inputs: [{name: 'STEPS', shadow: 'math_number', field: 'NUM'}]},
     turn: {opcode: 'motion_turnright', inputs: [{name: 'DEGREES', shadow: 'math_number', field: 'NUM'}]},
+    goto: {opcode: 'motion_gotoxy',
+        inputs: [
+            {name: 'X', shadow: 'math_number', field: 'NUM'},
+            {name: 'Y', shadow: 'math_number', field: 'NUM'}
+        ]},
+    change_x: {opcode: 'motion_changexby', inputs: [{name: 'DX', shadow: 'math_number', field: 'NUM'}]},
+    set_x: {opcode: 'motion_setx', inputs: [{name: 'X', shadow: 'math_number', field: 'NUM'}]},
+    change_y: {opcode: 'motion_changeyby', inputs: [{name: 'DY', shadow: 'math_number', field: 'NUM'}]},
+    set_y: {opcode: 'motion_sety', inputs: [{name: 'Y', shadow: 'math_number', field: 'NUM'}]},
     if_on_edge_bounce: {opcode: 'motion_ifonedgebounce', inputs: []},
-    say: {opcode: 'looks_say', inputs: [{name: 'MESSAGE', shadow: 'text', field: 'TEXT'}]}
+    say: {opcode: 'looks_say', inputs: [{name: 'MESSAGE', shadow: 'text', field: 'TEXT'}]},
+    think: {opcode: 'looks_think', inputs: [{name: 'MESSAGE', shadow: 'text', field: 'TEXT'}]},
+    say_secs: {opcode: 'looks_sayforsecs',
+        inputs: [
+            {name: 'MESSAGE', shadow: 'text', field: 'TEXT'},
+            {name: 'SECS', shadow: 'math_number', field: 'NUM'}
+        ]},
+    think_secs: {opcode: 'looks_thinkforsecs',
+        inputs: [
+            {name: 'MESSAGE', shadow: 'text', field: 'TEXT'},
+            {name: 'SECS', shadow: 'math_number', field: 'NUM'}
+        ]},
+    set_size: {opcode: 'looks_setsizeto', inputs: [{name: 'SIZE', shadow: 'math_number', field: 'NUM'}]},
+    change_size: {opcode: 'looks_changesizeby', inputs: [{name: 'CHANGE', shadow: 'math_number', field: 'NUM'}]},
+    show: {opcode: 'looks_show', inputs: []},
+    hide: {opcode: 'looks_hide', inputs: []},
+    next_costume: {opcode: 'looks_nextcostume', inputs: []},
+    wait: {opcode: 'control_wait', inputs: [{name: 'DURATION', shadow: 'math_positive_number', field: 'NUM'}]}
 };
 
 // opcode → {name, spec} 역방향 매핑 (decompile 용)
