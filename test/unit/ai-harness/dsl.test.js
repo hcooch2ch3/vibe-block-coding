@@ -1,4 +1,4 @@
-import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds, normalizeScript} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM} from './headless-target';
 
 const flag = body => ({hat: 'when_flag', body});
@@ -61,5 +61,55 @@ describe('Tier A flat opcode additions', () => {
         const prog = [{hat: 'when_clicked', body: [['move', 10]]}];
         await seed(vm, prog);
         expect(decompile(target.blocks)).toEqual(prog);
+    });
+});
+
+describe('Tier B substacks (repeat/forever)', () => {
+    test('repeat with a body round-trips', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['repeat', 3, [['move', 10], ['turn', 15]]]])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('forever with a body round-trips', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['forever', [['move', 10]]]])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('nested substacks round-trip', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['forever', [['repeat', 2, [['move', 10]]]]]])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('empty substack round-trips as []', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['forever', []]])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('a step can follow repeat (repeat is not a cap block)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['repeat', 2, [['move', 10]]], ['say', 'done']])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('a numeric-looking text message stays a string (text shadow not coerced)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([['say', '5'], ['say_secs', '7', 2]])];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('normalizeScript recurses: string vs number inside a loop compare equal', () => {
+        const a = {hat: 'when_flag', body: [['repeat', '3', [['move', '10']]]]};
+        const b = {hat: 'when_flag', body: [['repeat', 3, [['move', 10]]]]};
+        expect(JSON.stringify(normalizeScript(a))).toBe(JSON.stringify(normalizeScript(b)));
+    });
+    test('normalizeScript keeps text args as strings (numeric-equal text stays distinct)', () => {
+        const a = normalizeScript({hat: 'when_flag', body: [['say', '5']]});
+        const b = normalizeScript({hat: 'when_flag', body: [['say', '05']]});
+        expect(a.body[0]).toEqual(['say', '5']); // not coerced to number 5
+        expect(JSON.stringify(a)).not.toBe(JSON.stringify(b)); // a text edit is not a no-op
     });
 });
