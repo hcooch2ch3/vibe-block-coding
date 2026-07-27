@@ -54,8 +54,8 @@ export const OPMAP = {
         inputs: [{name: 'TIMES', shadow: 'math_whole_number', field: 'NUM'}],
         substack: 'SUBSTACK'
     },
-    // forever 는 cap 블록(뒤에 스텝 불가) — compile 은 강제 안 함, parseDSL 이 거부(Task 3).
-    forever: {opcode: 'control_forever', inputs: [], substack: 'SUBSTACK'}
+    // forever 는 cap 블록(뒤에 스텝 불가) — compile 은 강제 안 함, parseDSL 이 cap 로 거부.
+    forever: {opcode: 'control_forever', inputs: [], substack: 'SUBSTACK', cap: true}
 };
 
 // opcode → {name, spec} 역방향 매핑 (decompile 용)

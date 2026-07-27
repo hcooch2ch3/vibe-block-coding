@@ -26,12 +26,18 @@ export const buildSystemPrompt = function () {
     const lines = Object.entries(OPMAP).map(([name, spec]) => {
         const args = spec.inputs.map(inp => inp.name).join(', ');
         const kind = spec.hat ? ' (hat: starts a script)' : '';
-        return args ? `- ${name}(${args})${kind}` : `- ${name}${kind}`;
+        const head = args ? `${name}(${args})` : name;
+        return spec.substack ? `- ${head} { ...steps }${kind}` : `- ${head}${kind}`;
     });
     return [
         'You turn a child\'s request into Scratch blocks, written as a tiny JSON DSL.',
         'Supported steps:',
         ...lines,
+        '',
+        'Loops take a nested array of steps as their LAST element:',
+        '  ["repeat", 10, [["move", 10], ["turn", 15]]]',
+        '  ["forever", [["move", 10]]]',
+        'A "forever" must be the LAST step in its list — nothing can follow it.',
         '',
         'Reply with ONLY a JSON array of scripts. Each script is',
         '{"hat": "<hat step>", "body": [["step", ...args], ...]}.',
@@ -78,17 +84,38 @@ const sliceJSON = function (text) {
 export const parseDSL = function (text) {
     const parsed = JSON.parse(sliceJSON(text));
     const scripts = Array.isArray(parsed) ? parsed : [parsed];
-    scripts.forEach(script => {
-        if (!script || !OPMAP[script.hat]) {
-            throw new Error(`미지원 hat: ${script && script.hat}`);
-        }
-        (script.body || []).forEach(([op, ...args]) => {
-            const spec = OPMAP[op];
-            if (!spec) throw new Error(`미지원 opcode: ${op}`);
-            if (args.length !== spec.inputs.length) {
-                throw new Error(`${op}: 인자 ${spec.inputs.length}개 필요, ${args.length}개 받음`);
+    const validateStep = function validate (step, isLast) {
+        if (!Array.isArray(step)) throw new Error('스텝은 배열이어야 합니다');
+        const [op, ...args] = step;
+        const spec = OPMAP[op];
+        if (!spec) throw new Error(`미지원 opcode: ${op}`);
+        // 값 인자(하위 스택 앞)는 숫자/문자만 — 배열/객체가 NUM/TEXT 필드로 새는 것 방지.
+        args.slice(0, spec.inputs.length).forEach(a => {
+            if (typeof a !== 'number' && typeof a !== 'string') {
+                throw new Error(`${op}: 값 인자는 숫자나 문자여야 합니다`);
             }
         });
+        if (spec.substack) {
+            const sub = args[spec.inputs.length];
+            if (args.length !== spec.inputs.length + 1 || !Array.isArray(sub)) {
+                throw new Error(`${op}: 하위 스택 배열(마지막 인자)이 필요합니다`);
+            }
+            if (spec.cap && !isLast) {
+                throw new Error(`${op} 뒤에는 스텝을 둘 수 없습니다 (cap 블록)`);
+            }
+            sub.forEach((s, i) => validate(s, i === sub.length - 1));
+        } else if (args.length !== spec.inputs.length) {
+            throw new Error(`${op}: 인자 ${spec.inputs.length}개 필요, ${args.length}개 받음`);
+        }
+    };
+    scripts.forEach(script => {
+        const hatSpec = script && OPMAP[script.hat];
+        if (!hatSpec || !hatSpec.hat) {
+            throw new Error(`미지원 hat: ${script && script.hat}`);
+        }
+        const body = script.body || [];
+        if (!Array.isArray(body)) throw new Error('body 는 배열이어야 합니다');
+        body.forEach((step, i) => validateStep(step, i === body.length - 1));
     });
     return scripts;
 };

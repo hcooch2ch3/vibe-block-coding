@@ -18,6 +18,12 @@ describe('buildSystemPrompt', () => {
         // it must ask the model to answer with JSON
         expect(sys.toLowerCase()).toMatch(/json/);
     });
+    test('teaches the substack (loop) syntax and the forever-last rule', () => {
+        const sys = buildSystemPrompt();
+        expect(sys).toMatch(/\{ \.\.\.steps \}/); // repeat/forever rendered with a body
+        expect(sys).toMatch(/nested array/i);
+        expect(sys).toMatch(/forever.*LAST/i);
+    });
 });
 
 describe('buildUserPrompt', () => {
@@ -120,5 +126,36 @@ describe('requestScripts (fetch injected)', () => {
             message = e.message;
         }
         expect(message).toMatch(/invalid x-api-key/);
+    });
+});
+
+describe('parseDSL substack validation', () => {
+    const wrap = scripts => JSON.stringify(scripts);
+    test('accepts a valid repeat substack', () => {
+        const out = parseDSL(wrap([{hat: 'when_flag', body: [['repeat', 3, [['move', 10]]]]}]));
+        expect(out[0].body[0]).toEqual(['repeat', 3, [['move', 10]]]);
+    });
+    test('rejects a substack op whose last arg is not an array', () => {
+        expect(() => parseDSL(wrap([{hat: 'when_flag', body: [['repeat', 3, 5]]}]))).toThrow();
+    });
+    test('rejects a non-substack op given an extra array arg', () => {
+        expect(() => parseDSL(wrap([{hat: 'when_flag', body: [['move', 10, [['turn', 15]]]]}]))).toThrow();
+    });
+    test('rejects a step after forever (cap block)', () => {
+        expect(() => parseDSL(
+            wrap([{hat: 'when_flag', body: [['forever', [['move', 10]]], ['say', 'hi']]}])
+        )).toThrow();
+    });
+    test('rejects a malformed nested step', () => {
+        expect(() => parseDSL(wrap([{hat: 'when_flag', body: [['repeat', 3, [['move']]]]}]))).toThrow();
+    });
+    test('rejects a non-hat opcode used as a script hat', () => {
+        expect(() => parseDSL(wrap([{hat: 'move', body: []}]))).toThrow(/hat/);
+    });
+    test('rejects an array passed as a flat value arg', () => {
+        expect(() => parseDSL(wrap([{hat: 'when_flag', body: [['move', [['turn', 15]]]]}]))).toThrow();
+    });
+    test('rejects a non-array step', () => {
+        expect(() => parseDSL(wrap([{hat: 'when_flag', body: [5]}]))).toThrow();
     });
 });
