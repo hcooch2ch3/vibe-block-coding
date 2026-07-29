@@ -8,6 +8,9 @@ import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
 import {generate, edit} from '../lib/ai-harness/dev-console';
 import {decompile} from '../lib/ai-harness/dsl';
 import {loadKey, saveKey, clearKey} from '../lib/ai-harness/key-store';
+import {
+    loadPrefs, savePrefs, clampPosition, defaultPosition, HEADER_H, DEFAULT_CARD_H
+} from '../lib/ai-harness/ui-prefs';
 
 class VibePrompt extends React.Component {
     constructor (props) {
@@ -19,16 +22,47 @@ class VibePrompt extends React.Component {
             'handleSubmitInstruction',
             'handleResetKey',
             'handleChipClick',
-            'handleRetry'
+            'handleRetry',
+            'handleToggleCollapse',
+            'handleDragStop',
+            'handleResize'
         ]);
+        const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
+        const prefs = loadPrefs();
+        const collapsed = prefs ? prefs.collapsed : false;
+        // Clamp against the VISIBLE height so an expanded card can't rest with its
+        // body below the viewport bottom (only the header would be reachable).
+        const position = prefs ?
+            clampPosition({x: prefs.x, y: prefs.y}, viewport, collapsed ? HEADER_H : DEFAULT_CARD_H) :
+            defaultPosition(viewport);
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
             instructionDraft: '',
             busy: false,
             error: false,
-            lastInstruction: null
+            lastInstruction: null,
+            collapsed,
+            position
         };
+    }
+    componentDidMount () {
+        // Re-clamp on resize so a card near an edge can't be stranded off-screen
+        // (bounds="parent" only constrains an ACTIVE drag) — dual-review Task 4.
+        window.addEventListener('resize', this.handleResize);
+    }
+    componentWillUnmount () {
+        window.removeEventListener('resize', this.handleResize);
+    }
+    handleResize () {
+        const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
+        this.setState(prevState => ({
+            position: clampPosition(
+                prevState.position,
+                viewport,
+                prevState.collapsed ? HEADER_H : DEFAULT_CARD_H
+            )
+        }));
     }
     handleKeyDraftChange (e) {
         this.setState({keyDraft: e.target.value, error: false});
@@ -58,6 +92,29 @@ class VibePrompt extends React.Component {
         if (this.state.busy) return;
         clearKey();
         this.setState({apiKey: '', error: false});
+    }
+    handleToggleCollapse () {
+        this.setState(prevState => {
+            const collapsed = !prevState.collapsed;
+            // On expand, re-clamp so the newly-shown body isn't below the fold.
+            const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
+            const position = collapsed ?
+                prevState.position :
+                clampPosition(prevState.position, viewport, DEFAULT_CARD_H);
+            // savePrefs defaults to window.localStorage (guarded), matching how
+            // the container calls saveKey — no explicit storage arg.
+            savePrefs({...position, collapsed});
+            return {collapsed, position};
+        });
+    }
+    handleDragStop (e, data) {
+        // react-draggable already applied bounds="parent" for live drag; persist
+        // the resting spot. clampPosition is the load-time guard for stale coords.
+        const position = {x: data.x, y: data.y};
+        this.setState(prevState => {
+            savePrefs({...position, collapsed: prevState.collapsed});
+            return {position};
+        });
     }
     runInstruction (instruction, targetId) {
         // Enforce the busy invariant in the primitive itself, not only in the
@@ -117,9 +174,13 @@ class VibePrompt extends React.Component {
                 keyDraft={this.state.keyDraft}
                 onInstructionDraftChange={this.handleInstructionDraftChange}
                 onKeyDraftChange={this.handleKeyDraftChange}
+                collapsed={this.state.collapsed}
+                position={this.state.position}
                 onResetKey={this.handleResetKey}
                 onChipClick={this.handleChipClick}
                 onRetry={this.handleRetry}
+                onToggleCollapse={this.handleToggleCollapse}
+                onDragStop={this.handleDragStop}
                 onSubmitInstruction={this.handleSubmitInstruction}
                 onSubmitKey={this.handleSubmitKey}
             />

@@ -13,6 +13,9 @@ export const CARD_WIDTH = 300;
 export const HEADER_H = 40;
 export const EDGE_MARGIN = 8;
 export const DEFAULT_CARD_H = 220;
+// Keep the header below the Scratch menu bar (z-index 491 > our 480), so a card
+// dragged/clamped to the top isn't painted behind it and left un-grabbable.
+export const MENU_BAR_TOP = 48;
 
 const defaultStorage = () =>
     (typeof window === 'undefined' ? null : window.localStorage);
@@ -69,10 +72,10 @@ export const savePrefs = function (prefs, storage = defaultStorage()) {
  */
 export const clampPosition = function (pos, viewport, cardHeight = HEADER_H) {
     const maxX = Math.max(EDGE_MARGIN, viewport.innerWidth - CARD_WIDTH - EDGE_MARGIN);
-    const maxY = Math.max(EDGE_MARGIN, viewport.innerHeight - cardHeight - EDGE_MARGIN);
+    const maxY = Math.max(MENU_BAR_TOP, viewport.innerHeight - cardHeight - EDGE_MARGIN);
     return {
         x: clamp(pos.x, EDGE_MARGIN, maxX),
-        y: clamp(pos.y, EDGE_MARGIN, maxY)
+        y: clamp(pos.y, MENU_BAR_TOP, maxY)
     };
 };
 
@@ -86,5 +89,5 @@ export const defaultPosition = function (viewport) {
     return clampPosition({
         x: viewport.innerWidth - CARD_WIDTH - EDGE_MARGIN,
         y: viewport.innerHeight - DEFAULT_CARD_H - EDGE_MARGIN
-    }, viewport);
+    }, viewport, DEFAULT_CARD_H);
 };

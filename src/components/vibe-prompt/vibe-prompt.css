@@ -1,13 +1,62 @@
-.vibe-prompt {
+@import "../../css/z-index.css";
+
+/* Full-viewport, click-through layer that acts as the react-draggable bounds
+   parent. pointer-events:none so it never blocks the GUI; the card re-enables. */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: $z-index-card; /* 480 — floats above panels, below modals/menus */
+}
+
+.card {
+    position: absolute;
+    pointer-events: auto;
+    width: 300px;
+    max-width: calc(100vw - 16px);
     display: flex;
     flex-direction: column;
-    /* flex item of stageAndTargetWrapper: reserve our own height so the
-       flex-grow:1 target-wrapper above cannot collapse us to 0px. */
-    flex-shrink: 0;
-    padding: 0.5rem;
-    margin-top: 0.5rem;
     background: #e9f1fc;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.375rem 0.625rem;
+    background: #4c97ff;
+    color: white;
+    cursor: move;
+    user-select: none;
+}
+
+.headerTitle {
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+.headerActions {
+    display: flex;
+    align-items: center;
+}
+
+.collapseBtn {
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.body {
+    padding: 0.625rem;
 }
 
 .row {
@@ -53,6 +102,7 @@
     flex: 0 0 auto;
     border: none;
     background: transparent;
+    color: white;
     font-size: 1rem;
     cursor: pointer;
 }
@@ -140,4 +190,10 @@
     .dots > span {
         animation: none;
     }
+}
+
+.headerDot {
+    margin-right: 0.25rem;
+    font-size: 0.9rem;
+    line-height: 1;
 }

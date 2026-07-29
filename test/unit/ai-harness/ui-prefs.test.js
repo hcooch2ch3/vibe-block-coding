@@ -1,6 +1,6 @@
 import {
     loadPrefs, savePrefs, clampPosition, defaultPosition,
-    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN
+    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN, MENU_BAR_TOP
 } from '../../../src/lib/ai-harness/ui-prefs';
 
 const makeStorage = initial => {
@@ -71,8 +71,8 @@ describe('ui-prefs', () => {
                 y: vp.innerHeight - HEADER_H - EDGE_MARGIN
             });
         });
-        test('clamps negative coords to the edge margin', () => {
-            expect(clampPosition({x: -500, y: -500}, vp)).toEqual({x: EDGE_MARGIN, y: EDGE_MARGIN});
+        test('clamps negative coords to the edge margin (y stays below the menu bar)', () => {
+            expect(clampPosition({x: -500, y: -500}, vp)).toEqual({x: EDGE_MARGIN, y: MENU_BAR_TOP});
         });
         test('honors a taller cardHeight so the expanded body stays on-screen', () => {
             const tall = 220;

@@ -2,6 +2,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import classNames from 'classnames';
+import Draggable from 'react-draggable';
 
 import styles from './vibe-prompt.css';
 
@@ -70,6 +71,21 @@ const messages = defineMessages({
         id: 'vibe.prompt.tryAgain',
         defaultMessage: 'Try again',
         description: 'Button to retry the last request after an error'
+    },
+    title: {
+        id: 'vibe.prompt.title',
+        defaultMessage: 'Make it with words',
+        description: 'Title shown in the floating AI card header'
+    },
+    collapse: {
+        id: 'vibe.prompt.collapse',
+        defaultMessage: 'Collapse',
+        description: 'Tooltip for the button that collapses the card'
+    },
+    expand: {
+        id: 'vibe.prompt.expand',
+        defaultMessage: 'Expand',
+        description: 'Tooltip for the button that expands the card'
     }
 });
 
@@ -111,52 +127,51 @@ const VibePromptComponent = props => {
         keyDraft, instructionDraft,
         onKeyDraftChange, onInstructionDraftChange,
         onSubmitKey, onSubmitInstruction, onResetKey,
-        onChipClick, onRetry
+        onChipClick, onRetry,
+        collapsed, position, onToggleCollapse, onDragStop
     } = props;
 
-    if (!hasKey) {
-        return (
-            <div className={styles.vibePrompt}>
-                <form
-                    className={styles.row}
-                    onSubmit={onSubmitKey}
+    const keyEntry = (
+        <div className={styles.body}>
+            <form
+                className={styles.row}
+                onSubmit={onSubmitKey}
+            >
+                <span className={styles.icon}>{'🔑'}</span>
+                <input
+                    aria-label={intl.formatMessage(messages.keyPlaceholder)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={styles.input}
+                    type="text"
+                    inputMode="text"
+                    placeholder={intl.formatMessage(messages.keyPlaceholder)}
+                    value={keyDraft}
+                    onChange={onKeyDraftChange}
+                />
+                <button
+                    className={styles.button}
+                    type="submit"
                 >
-                    <span className={styles.icon}>{'🔑'}</span>
-                    <input
-                        aria-label={intl.formatMessage(messages.keyPlaceholder)}
-                        autoComplete="off"
-                        spellCheck={false}
-                        className={styles.input}
-                        type="text"
-                        inputMode="text"
-                        placeholder={intl.formatMessage(messages.keyPlaceholder)}
-                        value={keyDraft}
-                        onChange={onKeyDraftChange}
-                    />
-                    <button
-                        className={styles.button}
-                        type="submit"
-                    >
-                        {intl.formatMessage(messages.saveKey)}
-                    </button>
-                </form>
-                <div className={styles.notice}>
-                    {intl.formatMessage(messages.keyNotice)}
-                </div>
-                {error && (
-                    <div
-                        className={classNames(styles.status, styles.error)}
-                        role="alert"
-                    >
-                        {intl.formatMessage(messages.saveKeyError)}
-                    </div>
-                )}
+                    {intl.formatMessage(messages.saveKey)}
+                </button>
+            </form>
+            <div className={styles.notice}>
+                {intl.formatMessage(messages.keyNotice)}
             </div>
-        );
-    }
+            {error && (
+                <div
+                    className={classNames(styles.status, styles.error)}
+                    role="alert"
+                >
+                    {intl.formatMessage(messages.saveKeyError)}
+                </div>
+            )}
+        </div>
+    );
 
-    return (
-        <div className={styles.vibePrompt}>
+    const instructionEntry = (
+        <div className={styles.body}>
             <form
                 className={styles.row}
                 onSubmit={onSubmitInstruction}
@@ -173,16 +188,6 @@ const VibePromptComponent = props => {
                     value={instructionDraft}
                     onChange={onInstructionDraftChange}
                 />
-                <button
-                    aria-label={intl.formatMessage(messages.resetKey)}
-                    className={styles.gear}
-                    type="button"
-                    disabled={busy}
-                    title={intl.formatMessage(messages.resetKey)}
-                    onClick={onResetKey}
-                >
-                    {'⚙️'}
-                </button>
                 <button
                     className={styles.button}
                     disabled={busy}
@@ -236,30 +241,94 @@ const VibePromptComponent = props => {
             )}
         </div>
     );
+
+    const body = hasKey ? instructionEntry : keyEntry;
+    const collapseLabel = intl.formatMessage(collapsed ? messages.expand : messages.collapse);
+
+    return (
+        // Full-viewport, click-through layer = the react-draggable bounds parent.
+        <div className={styles.overlay}>
+            <Draggable
+                bounds="parent"
+                handle=".vibe-drag-handle"
+                cancel=".vibe-no-drag"
+                position={position}
+                onStop={onDragStop}
+            >
+                <div className={styles.card}>
+                    <div className={classNames(styles.header, 'vibe-drag-handle')}>
+                        <span className={styles.headerTitle}>
+                            {intl.formatMessage(messages.title)} {'✨'}
+                        </span>
+                        <span className={styles.headerActions}>
+                            {collapsed && (busy || error) && (
+                                // Collapsed hides the body; surface a hint so a
+                                // child knows a request is running/failed.
+                                <span
+                                    className={styles.headerDot}
+                                    aria-hidden="true"
+                                >
+                                    {busy ? '⏳' : '⚠️'}
+                                </span>
+                            )}
+                            {hasKey && (
+                                <button
+                                    aria-label={intl.formatMessage(messages.resetKey)}
+                                    className={classNames(styles.gear, 'vibe-no-drag')}
+                                    type="button"
+                                    disabled={busy}
+                                    title={intl.formatMessage(messages.resetKey)}
+                                    onClick={onResetKey}
+                                >
+                                    {'⚙️'}
+                                </button>
+                            )}
+                            <button
+                                aria-label={collapseLabel}
+                                className={classNames(styles.collapseBtn, 'vibe-no-drag')}
+                                type="button"
+                                title={collapseLabel}
+                                onClick={onToggleCollapse}
+                            >
+                                {collapsed ? '▸' : '▾'}
+                            </button>
+                        </span>
+                    </div>
+                    {collapsed ? null : body}
+                </div>
+            </Draggable>
+        </div>
+    );
 };
 
 VibePromptComponent.defaultProps = {
     busy: false,
+    collapsed: false,
     error: false,
     hasKey: false,
     instructionDraft: '',
-    keyDraft: ''
+    keyDraft: '',
+    position: {x: 0, y: 0}
 };
 
 VibePromptComponent.propTypes = {
     busy: PropTypes.bool,
+    collapsed: PropTypes.bool,
     error: PropTypes.bool,
     hasKey: PropTypes.bool,
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
     onChipClick: PropTypes.func.isRequired,
+    onDragStop: PropTypes.func.isRequired,
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
     onResetKey: PropTypes.func.isRequired,
     onRetry: PropTypes.func.isRequired,
     onSubmitInstruction: PropTypes.func.isRequired,
-    onSubmitKey: PropTypes.func.isRequired
+    onSubmitKey: PropTypes.func.isRequired,
+    onToggleCollapse: PropTypes.func.isRequired,
+    position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number})
 };
 
 export default injectIntl(VibePromptComponent);

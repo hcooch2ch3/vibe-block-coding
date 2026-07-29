@@ -8,6 +8,7 @@ import VibePromptConnected, {VibePromptContainer} from '../../../src/containers/
 import {saveKey, clearKey} from '../../../src/lib/ai-harness/key-store';
 import * as devConsole from '../../../src/lib/ai-harness/dev-console';
 import * as dsl from '../../../src/lib/ai-harness/dsl';
+import * as uiPrefs from '../../../src/lib/ai-harness/ui-prefs';
 
 // The real dsl.decompile is covered by test/unit/ai-harness/dsl.test.js; here it
 // is mocked so these tests isolate the container's routing/guard logic. The mock
@@ -260,6 +261,60 @@ describe('VibePrompt container', () => {
             wrapper.instance().handleResetKey();
             expect(clearKey).toHaveBeenCalled();
             expect(wrapper.instance().state.apiKey).toBe('');
+        });
+    });
+
+    describe('floating card prefs', () => {
+        test('initial position falls back to defaultPosition when nothing stored', () => {
+            const vm = makeVm({});
+            jest.spyOn(uiPrefs, 'loadPrefs').mockReturnValue(null);
+            const wrapper = render(vm);
+            const {x, y} = wrapper.instance().state.position;
+            expect(Number.isFinite(x)).toBe(true);
+            expect(Number.isFinite(y)).toBe(true);
+            expect(wrapper.instance().state.collapsed).toBe(false);
+        });
+
+        test('stored position is clamped into the viewport on init', () => {
+            const vm = makeVm({});
+            jest.spyOn(uiPrefs, 'loadPrefs').mockReturnValue({x: 99999, y: 99999, collapsed: true});
+            const wrapper = render(vm);
+            const {x, y} = wrapper.instance().state.position;
+            expect(x).toBeLessThan(99999);
+            expect(y).toBeLessThan(99999);
+            expect(wrapper.instance().state.collapsed).toBe(true);
+        });
+
+        test('toggling collapse flips state and persists', () => {
+            const vm = makeVm({});
+            const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
+            const wrapper = render(vm);
+            const before = wrapper.instance().state.collapsed;
+            wrapper.instance().handleToggleCollapse();
+            expect(wrapper.instance().state.collapsed).toBe(!before);
+            expect(saveSpy).toHaveBeenCalled();
+        });
+
+        test('drag stop stores and persists the resting position (no re-clamp)', () => {
+            const vm = makeVm({});
+            const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
+            const wrapper = render(vm);
+            wrapper.instance().handleDragStop({}, {x: 120, y: 80});
+            expect(wrapper.instance().state.position).toEqual({x: 120, y: 80});
+            expect(saveSpy).toHaveBeenCalledWith(
+                expect.objectContaining({x: 120, y: 80})
+            );
+        });
+
+        test('window resize re-clamps a now-off-screen card back into view', () => {
+            const vm = makeVm({});
+            jest.spyOn(uiPrefs, 'loadPrefs').mockReturnValue(null);
+            const wrapper = render(vm);
+            wrapper.setState({position: {x: 5000, y: 5000}}); // simulate a shrunken window
+            wrapper.instance().handleResize();
+            const {x, y} = wrapper.instance().state.position;
+            expect(x).toBeLessThan(5000);
+            expect(y).toBeLessThan(5000);
         });
     });
 
