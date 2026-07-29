@@ -160,6 +160,28 @@ describe('VibePrompt container', () => {
         });
     });
 
+    describe('example chips', () => {
+        test('clicking a chip fills the instruction draft and clears error', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({error: true, instructionDraft: ''});
+            wrapper.instance().handleChipClick('Walk around');
+            expect(wrapper.instance().state.instructionDraft).toBe('Walk around');
+            expect(wrapper.instance().state.error).toBe(false);
+        });
+
+        test('handleChipClick does not send a request (fill only)', async () => {
+            const vm = makeVm({});
+            const genSpy = jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.resolve([]));
+            const editSpy = jest.spyOn(devConsole, 'edit').mockImplementation(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.instance().handleChipClick('Say hello');
+            await flushPromises();
+            expect(genSpy).not.toHaveBeenCalled();
+            expect(editSpy).not.toHaveBeenCalled();
+        });
+    });
+
     describe('key entry', () => {
         test('a successful saveKey switches to the ready state', () => {
             const vm = makeVm({});

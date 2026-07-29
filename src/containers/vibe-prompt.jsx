@@ -17,7 +17,8 @@ class VibePrompt extends React.Component {
             'handleInstructionDraftChange',
             'handleSubmitKey',
             'handleSubmitInstruction',
-            'handleResetKey'
+            'handleResetKey',
+            'handleChipClick'
         ]);
         this.state = {
             apiKey: loadKey(),
@@ -33,6 +34,11 @@ class VibePrompt extends React.Component {
     handleInstructionDraftChange (e) {
         // clear a stale error as soon as the child starts revising (Task 2 review)
         this.setState({instructionDraft: e.target.value, error: false});
+    }
+    handleChipClick (text) {
+        // Fill only — never auto-run. The child owns pressing Send (educational,
+        // avoids accidental API spend, two-tap demo). Clear any stale error.
+        this.setState({instructionDraft: text, error: false});
     }
     handleSubmitKey (e) {
         e.preventDefault();
@@ -98,6 +104,7 @@ class VibePrompt extends React.Component {
                 onInstructionDraftChange={this.handleInstructionDraftChange}
                 onKeyDraftChange={this.handleKeyDraftChange}
                 onResetKey={this.handleResetKey}
+                onChipClick={this.handleChipClick}
                 onSubmitInstruction={this.handleSubmitInstruction}
                 onSubmitKey={this.handleSubmitKey}
             />

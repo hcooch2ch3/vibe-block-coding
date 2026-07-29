@@ -50,15 +50,63 @@ const messages = defineMessages({
         id: 'vibe.prompt.saveKeyError',
         defaultMessage: 'Could not save your key in this browser. Try again?',
         description: 'Shown when the API key could not be written to storage'
+    },
+    chipWalk: {
+        id: 'vibe.prompt.chipWalk',
+        defaultMessage: 'Walk around',
+        description: 'Example prompt chip: make the sprite walk'
+    },
+    chipSpin: {
+        id: 'vibe.prompt.chipSpin',
+        defaultMessage: 'Keep spinning',
+        description: 'Example prompt chip: make the sprite spin forever'
+    },
+    chipHello: {
+        id: 'vibe.prompt.chipHello',
+        defaultMessage: 'Say hello',
+        description: 'Example prompt chip: make the sprite say hello'
     }
 });
+
+// A chip is its own component with a bound handler so the mapped list needs no
+// inline arrow in JSX (project lint forbids react/jsx-no-bind). It reports its
+// filled sentence back up via onClick(label) — fill only, never auto-run.
+class ChipButton extends React.Component {
+    constructor (props) {
+        super(props);
+        this.handleClick = this.handleClick.bind(this);
+    }
+    handleClick () {
+        this.props.onClick(this.props.label);
+    }
+    render () {
+        return (
+            <button
+                className={this.props.className}
+                type="button"
+                disabled={this.props.disabled}
+                onClick={this.handleClick}
+            >
+                {this.props.label}
+            </button>
+        );
+    }
+}
+
+ChipButton.propTypes = {
+    className: PropTypes.string,
+    disabled: PropTypes.bool,
+    label: PropTypes.string.isRequired,
+    onClick: PropTypes.func.isRequired
+};
 
 const VibePromptComponent = props => {
     const {
         intl, hasKey, busy, error,
         keyDraft, instructionDraft,
         onKeyDraftChange, onInstructionDraftChange,
-        onSubmitKey, onSubmitInstruction, onResetKey
+        onSubmitKey, onSubmitInstruction, onResetKey,
+        onChipClick
     } = props;
 
     if (!hasKey) {
@@ -138,6 +186,17 @@ const VibePromptComponent = props => {
                     {intl.formatMessage(messages.send)}
                 </button>
             </form>
+            <div className={styles.chips}>
+                {[messages.chipWalk, messages.chipSpin, messages.chipHello].map(chip => (
+                    <ChipButton
+                        key={chip.id}
+                        className={styles.chip}
+                        disabled={busy}
+                        label={intl.formatMessage(chip)}
+                        onClick={onChipClick}
+                    />
+                ))}
+            </div>
             {busy && (
                 <div
                     className={styles.status}
@@ -173,6 +232,7 @@ VibePromptComponent.propTypes = {
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
+    onChipClick: PropTypes.func.isRequired,
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
     onResetKey: PropTypes.func.isRequired,

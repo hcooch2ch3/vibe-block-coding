@@ -72,3 +72,31 @@
 .error {
     color: #e64d5f;
 }
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+.chip {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid #b9d6f2;
+    border-radius: 1rem;
+    background: white;
+    color: #4c97ff;
+    font-size: 0.8rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.chip:hover {
+    background: #f0f6ff;
+}
+
+.chip:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
