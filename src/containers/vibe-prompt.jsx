@@ -18,14 +18,16 @@ class VibePrompt extends React.Component {
             'handleSubmitKey',
             'handleSubmitInstruction',
             'handleResetKey',
-            'handleChipClick'
+            'handleChipClick',
+            'handleRetry'
         ]);
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
             instructionDraft: '',
             busy: false,
-            error: false
+            error: false,
+            lastInstruction: null
         };
     }
     handleKeyDraftChange (e) {
@@ -57,29 +59,22 @@ class VibePrompt extends React.Component {
         clearKey();
         this.setState({apiKey: '', error: false});
     }
-    handleSubmitInstruction (e) {
-        e.preventDefault();
-        const instruction = this.state.instructionDraft.trim();
+    runInstruction (instruction, targetId) {
+        // Enforce the busy invariant in the primitive itself, not only in the
+        // callers — so a future caller can't re-introduce a double-submit /
+        // stop-threads-mid-request (dual-review Task 3, defense-in-depth).
+        if (this.state.busy) return Promise.resolve();
         const vm = this.props.vm;
-        if (!instruction || this.state.busy || !this.state.apiKey ||
-            !vm || !vm.editingTarget) {
-            return;
-        }
-
-        // Pin the sprite now so a mid-request sprite switch can't apply this
-        // diff to a different target (silent block loss). Stop threads so
-        // applyEdit's deleteBlock doesn't orphan a running script.
-        const targetId = vm.editingTarget.id;
         const apiKey = this.state.apiKey;
+        // Stop threads so applyEdit's deleteBlock can't orphan a running script.
         vm.stopAll();
-
         this.setState({busy: true, error: false});
         // Detection (decompile) can throw on non-OPMAP blocks — keep it inside
         // the chain so any throw lands in .catch and shows the friendly error.
-        Promise.resolve()
+        return Promise.resolve()
             .then(() => {
-                // fail-closed: if the pinned sprite was deleted mid-request, do
-                // NOT fall back to editingTarget (would edit the wrong sprite).
+                // fail-closed: never fall back to editingTarget if the pinned
+                // sprite was deleted mid-request (would edit the wrong sprite).
                 const target = vm.runtime.getTargetById(targetId);
                 if (!target) throw new Error('vibe: pinned sprite no longer exists');
                 const isEmpty = decompile(target.blocks).length === 0;
@@ -93,6 +88,25 @@ class VibePrompt extends React.Component {
                 this.setState({busy: false, error: true});
             });
     }
+    handleSubmitInstruction (e) {
+        e.preventDefault();
+        const instruction = this.state.instructionDraft.trim();
+        const vm = this.props.vm;
+        if (!instruction || this.state.busy || !this.state.apiKey ||
+            !vm || !vm.editingTarget) {
+            return;
+        }
+        // Pin the sprite now AND remember it so Try-again replays the SAME target
+        // even if the child switches sprites after an error.
+        const targetId = vm.editingTarget.id;
+        this.setState({lastInstruction: {instruction, targetId}});
+        this.runInstruction(instruction, targetId);
+    }
+    handleRetry () {
+        const last = this.state.lastInstruction;
+        if (!last || this.state.busy || !this.state.apiKey) return;
+        this.runInstruction(last.instruction, last.targetId);
+    }
     render () {
         return (
             <VibePromptComponent
@@ -105,6 +119,7 @@ class VibePrompt extends React.Component {
                 onKeyDraftChange={this.handleKeyDraftChange}
                 onResetKey={this.handleResetKey}
                 onChipClick={this.handleChipClick}
+                onRetry={this.handleRetry}
                 onSubmitInstruction={this.handleSubmitInstruction}
                 onSubmitKey={this.handleSubmitKey}
             />

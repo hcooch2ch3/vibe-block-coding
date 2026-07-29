@@ -158,6 +158,50 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.error).toBe(false);
             expect(wrapper.instance().state.instructionDraft).toBe('x');
         });
+
+        test('try-again replays the PINNED target, not the current sprite', async () => {
+            const vm = makeVm({});
+            const targetA = vm.editingTarget;
+            const spriteB = {id: 'sprite-b', blocks: {}};
+            vm.runtime.getTargetById = id => {
+                if (id === 'sprite-a') return targetA;
+                if (id === 'sprite-b') return spriteB;
+                return null;
+            };
+            jest.spyOn(dsl, 'decompile').mockReturnValue([]);
+            const genSpy = jest.spyOn(devConsole, 'generate')
+                .mockImplementationOnce(() => Promise.reject(new Error('401')))
+                .mockImplementationOnce(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.setState({instructionDraft: 'walk'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            expect(wrapper.instance().state.error).toBe(true);
+            vm.editingTarget = spriteB; // child clicks sprite B after the error
+            wrapper.instance().handleRetry();
+            await flushPromises();
+            expect(genSpy).toHaveBeenCalledTimes(2);
+            expect(genSpy.mock.calls[1][1].targetId).toBe('sprite-a'); // pinned, not B
+            expect(genSpy.mock.calls[1][1].instruction).toBe('walk'); // same instruction replayed
+            expect(wrapper.instance().state.error).toBe(false);
+        });
+
+        test('handleRetry is a no-op when there is nothing to retry', () => {
+            const vm = makeVm({});
+            const genSpy = jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.instance().handleRetry();
+            expect(genSpy).not.toHaveBeenCalled();
+        });
+
+        test('handleRetry is a no-op while a request is already in flight', () => {
+            const vm = makeVm({});
+            const genSpy = jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.setState({busy: true, lastInstruction: {instruction: 'walk', targetId: 'sprite-a'}});
+            wrapper.instance().handleRetry();
+            expect(genSpy).not.toHaveBeenCalled();
+        });
     });
 
     describe('example chips', () => {

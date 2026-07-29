@@ -65,6 +65,11 @@ const messages = defineMessages({
         id: 'vibe.prompt.chipHello',
         defaultMessage: 'Say hello',
         description: 'Example prompt chip: make the sprite say hello'
+    },
+    tryAgain: {
+        id: 'vibe.prompt.tryAgain',
+        defaultMessage: 'Try again',
+        description: 'Button to retry the last request after an error'
     }
 });
 
@@ -106,7 +111,7 @@ const VibePromptComponent = props => {
         keyDraft, instructionDraft,
         onKeyDraftChange, onInstructionDraftChange,
         onSubmitKey, onSubmitInstruction, onResetKey,
-        onChipClick
+        onChipClick, onRetry
     } = props;
 
     if (!hasKey) {
@@ -198,11 +203,20 @@ const VibePromptComponent = props => {
                 ))}
             </div>
             {busy && (
-                <div
-                    className={styles.status}
-                    aria-live="polite"
-                >
-                    {intl.formatMessage(messages.working)}
+                <div className={styles.status}>
+                    <span aria-live="polite">
+                        {intl.formatMessage(messages.working)}
+                    </span>
+                    {/* Decorative dots kept OUTSIDE the live region so their
+                        markup can never interact with live-region recomputation. */}
+                    <span
+                        className={styles.dots}
+                        aria-hidden="true"
+                    >
+                        <span />
+                        <span />
+                        <span />
+                    </span>
                 </div>
             )}
             {error && !busy && (
@@ -210,7 +224,14 @@ const VibePromptComponent = props => {
                     className={classNames(styles.status, styles.error)}
                     role="alert"
                 >
-                    {intl.formatMessage(messages.error)}
+                    <span>{intl.formatMessage(messages.error)}</span>
+                    <button
+                        className={styles.retry}
+                        type="button"
+                        onClick={onRetry}
+                    >
+                        {intl.formatMessage(messages.tryAgain)}
+                    </button>
                 </div>
             )}
         </div>
@@ -236,6 +257,7 @@ VibePromptComponent.propTypes = {
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
     onResetKey: PropTypes.func.isRequired,
+    onRetry: PropTypes.func.isRequired,
     onSubmitInstruction: PropTypes.func.isRequired,
     onSubmitKey: PropTypes.func.isRequired
 };
