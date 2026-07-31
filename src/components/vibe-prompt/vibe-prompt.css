@@ -53,6 +53,10 @@
 }
 
 .collapseBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.5rem;
     border: none;
     background: transparent;
     color: white;
@@ -105,11 +109,16 @@
 }
 
 .gear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
+    height: 1.5rem;
     border: none;
     background: transparent;
     color: white;
     font-size: 1rem;
+    line-height: 1;
     cursor: pointer;
 }
 
