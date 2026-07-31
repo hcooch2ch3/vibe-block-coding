@@ -1,6 +1,6 @@
 import {
-    loadPrefs, savePrefs, clampPosition, defaultPosition,
-    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN, MENU_BAR_TOP
+    loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
+    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN, MENU_BAR_TOP, MIN_W, MIN_H
 } from '../../../src/lib/ai-harness/ui-prefs';
 
 const makeStorage = initial => {
@@ -22,10 +22,17 @@ describe('ui-prefs', () => {
         test('returns null when nothing stored', () => {
             expect(loadPrefs(makeStorage())).toBe(null);
         });
-        test('round-trips a saved prefs object', () => {
+        test('round-trips a saved prefs object (size defaults to null)', () => {
             const storage = makeStorage();
             savePrefs({x: 12, y: 34, collapsed: true}, storage);
-            expect(loadPrefs(storage)).toEqual({x: 12, y: 34, collapsed: true});
+            expect(loadPrefs(storage)).toEqual({x: 12, y: 34, collapsed: true, w: null, h: null});
+        });
+        test('round-trips a saved size', () => {
+            const storage = makeStorage();
+            savePrefs({x: 1, y: 2, collapsed: false, w: 360, h: 300}, storage);
+            const loaded = loadPrefs(storage);
+            expect(loaded.w).toBe(360);
+            expect(loaded.h).toBe(300);
         });
         test('returns null on malformed JSON', () => {
             const storage = makeStorage({[STORAGE_KEY]: '{not json'});
@@ -77,6 +84,21 @@ describe('ui-prefs', () => {
         test('honors a taller cardHeight so the expanded body stays on-screen', () => {
             const tall = 220;
             expect(clampPosition({x: 500, y: 99999}, vp, tall).y).toBe(vp.innerHeight - tall - EDGE_MARGIN);
+        });
+    });
+
+    describe('clampSize', () => {
+        const vp = {innerWidth: 1000, innerHeight: 800};
+        test('leaves an in-bounds size unchanged', () => {
+            expect(clampSize({w: 360, h: 300}, vp)).toEqual({w: 360, h: 300});
+        });
+        test('clamps below the minimum up to MIN_W/MIN_H', () => {
+            expect(clampSize({w: 10, h: 10}, vp)).toEqual({w: MIN_W, h: MIN_H});
+        });
+        test('clamps above the viewport down to fit', () => {
+            const clamped = clampSize({w: 99999, h: 99999}, vp);
+            expect(clamped.w).toBeLessThanOrEqual(vp.innerWidth);
+            expect(clamped.h).toBeLessThan(vp.innerHeight);
         });
     });
 

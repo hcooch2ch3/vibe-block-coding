@@ -16,6 +16,11 @@ export const DEFAULT_CARD_H = 220;
 // Keep the header below the Scratch menu bar (z-index 491 > our 480), so a card
 // dragged/clamped to the top isn't painted behind it and left un-grabbable.
 export const MENU_BAR_TOP = 48;
+// Resizable-card bounds. Default width matches CARD_WIDTH; height defaults to
+// null (content-driven) until the child drags the resize handle.
+export const MIN_W = 240;
+export const MIN_H = 160;
+export const DEFAULT_W = CARD_WIDTH;
 
 const defaultStorage = () =>
     (typeof window === 'undefined' ? null : window.localStorage);
@@ -34,7 +39,15 @@ export const loadPrefs = function (storage = defaultStorage()) {
         if (typeof raw !== 'string') return null;
         const parsed = JSON.parse(raw);
         if (!parsed || !Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
-        return {x: parsed.x, y: parsed.y, collapsed: Boolean(parsed.collapsed)};
+        return {
+            x: parsed.x,
+            y: parsed.y,
+            collapsed: Boolean(parsed.collapsed),
+            // size is optional — width defaults on load, height stays content-driven
+            // (null) until the child has resized. Only accept finite stored values.
+            w: Number.isFinite(parsed.w) ? parsed.w : null,
+            h: Number.isFinite(parsed.h) ? parsed.h : null
+        };
     } catch (e) {
         return null;
     }
@@ -48,11 +61,14 @@ export const loadPrefs = function (storage = defaultStorage()) {
 export const savePrefs = function (prefs, storage = defaultStorage()) {
     if (!storage) return false;
     try {
-        storage.setItem(STORAGE_KEY, JSON.stringify({
+        const out = {
             x: prefs.x,
             y: prefs.y,
             collapsed: Boolean(prefs.collapsed)
-        }));
+        };
+        if (Number.isFinite(prefs.w)) out.w = prefs.w;
+        if (Number.isFinite(prefs.h)) out.h = prefs.h;
+        storage.setItem(STORAGE_KEY, JSON.stringify(out));
         return true;
     } catch (e) {
         return false;
@@ -90,4 +106,20 @@ export const defaultPosition = function (viewport) {
         x: viewport.innerWidth - CARD_WIDTH - EDGE_MARGIN,
         y: viewport.innerHeight - DEFAULT_CARD_H - EDGE_MARGIN
     }, viewport, DEFAULT_CARD_H);
+};
+
+/**
+ * Clamp a resize to sane bounds: at least MIN_W x MIN_H, at most the viewport
+ * minus margins (so the card can't be resized larger than the screen).
+ * @param {object} size - the candidate {w, h}
+ * @param {object} viewport - {innerWidth, innerHeight} of the window
+ * @returns {object} - the clamped {w, h}
+ */
+export const clampSize = function (size, viewport) {
+    const maxW = Math.max(MIN_W, viewport.innerWidth - (2 * EDGE_MARGIN));
+    const maxH = Math.max(MIN_H, viewport.innerHeight - MENU_BAR_TOP - EDGE_MARGIN);
+    return {
+        w: clamp(size.w, MIN_W, maxW),
+        h: clamp(size.h, MIN_H, maxH)
+    };
 };

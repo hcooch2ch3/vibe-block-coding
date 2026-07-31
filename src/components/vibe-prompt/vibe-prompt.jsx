@@ -87,6 +87,11 @@ const messages = defineMessages({
         id: 'vibe.prompt.expand',
         defaultMessage: 'Expand',
         description: 'Tooltip for the button that expands the card'
+    },
+    back: {
+        id: 'vibe.prompt.back',
+        defaultMessage: 'Back',
+        description: 'Button to cancel changing the API key and keep the current one'
     }
 });
 
@@ -127,11 +132,16 @@ const VibePromptComponent = props => {
         intl, hasKey, busy, error,
         keyDraft, instructionDraft,
         onKeyDraftChange, onInstructionDraftChange,
-        onSubmitKey, onSubmitInstruction, onResetKey,
+        onSubmitKey, onSubmitInstruction, onEditKey,
         onChipClick, onRetry,
         collapsed, position, onToggleCollapse, onDragStop,
-        history, vm, onClearHistory
+        history, vm, onClearHistory,
+        canCancelKey, onCancelKey, size, onResizeStart
     } = props;
+
+    const sized = Boolean(size.h) && !collapsed;
+    const cardStyle = {width: size.w};
+    if (sized) cardStyle.height = size.h;
 
     const keyEntry = (
         <div className={styles.body}>
@@ -157,6 +167,16 @@ const VibePromptComponent = props => {
                 >
                     {intl.formatMessage(messages.saveKey)}
                 </button>
+                {canCancelKey && (
+                    <button
+                        className={styles.backBtn}
+                        type="button"
+                        title={intl.formatMessage(messages.back)}
+                        onClick={onCancelKey}
+                    >
+                        {intl.formatMessage(messages.back)}
+                    </button>
+                )}
             </form>
             <div className={styles.notice}>
                 {intl.formatMessage(messages.keyNotice)}
@@ -262,7 +282,10 @@ const VibePromptComponent = props => {
                 position={position}
                 onStop={onDragStop}
             >
-                <div className={styles.card}>
+                <div
+                    className={classNames(styles.card, sized ? styles.sized : null)}
+                    style={cardStyle}
+                >
                     <div className={classNames(styles.header, 'vibe-drag-handle')}>
                         <span className={styles.headerTitle}>
                             {intl.formatMessage(messages.title)} {'✨'}
@@ -285,7 +308,7 @@ const VibePromptComponent = props => {
                                     type="button"
                                     disabled={busy}
                                     title={intl.formatMessage(messages.resetKey)}
-                                    onClick={onResetKey}
+                                    onClick={onEditKey}
                                 >
                                     {'⚙️'}
                                 </button>
@@ -302,6 +325,12 @@ const VibePromptComponent = props => {
                         </span>
                     </div>
                     {collapsed ? null : body}
+                    {collapsed ? null : (
+                        <div
+                            className={classNames(styles.resizeHandle, 'vibe-no-drag')}
+                            onMouseDown={onResizeStart}
+                        />
+                    )}
                 </div>
             </Draggable>
         </div>
@@ -310,17 +339,20 @@ const VibePromptComponent = props => {
 
 VibePromptComponent.defaultProps = {
     busy: false,
+    canCancelKey: false,
     collapsed: false,
     error: false,
     hasKey: false,
     history: [],
     instructionDraft: '',
     keyDraft: '',
-    position: {x: 0, y: 0}
+    position: {x: 0, y: 0},
+    size: {w: 300, h: null}
 };
 
 VibePromptComponent.propTypes = {
     busy: PropTypes.bool,
+    canCancelKey: PropTypes.bool,
     collapsed: PropTypes.bool,
     error: PropTypes.bool,
     hasKey: PropTypes.bool,
@@ -328,17 +360,20 @@ VibePromptComponent.propTypes = {
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
+    onCancelKey: PropTypes.func,
     onChipClick: PropTypes.func.isRequired,
     onClearHistory: PropTypes.func,
     onDragStop: PropTypes.func.isRequired,
+    onEditKey: PropTypes.func.isRequired,
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
-    onResetKey: PropTypes.func.isRequired,
+    onResizeStart: PropTypes.func,
     onRetry: PropTypes.func.isRequired,
     onSubmitInstruction: PropTypes.func.isRequired,
     onSubmitKey: PropTypes.func.isRequired,
     onToggleCollapse: PropTypes.func.isRequired,
     position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number}),
+    size: PropTypes.shape({w: PropTypes.number, h: PropTypes.number}),
     vm: PropTypes.object
 };
 

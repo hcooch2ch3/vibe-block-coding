@@ -8,10 +8,11 @@ import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
 import {generate, edit} from '../lib/ai-harness/dev-console';
 import {decompile} from '../lib/ai-harness/dsl';
 import {diff} from '../lib/ai-harness/edit';
-import {loadKey, saveKey, clearKey} from '../lib/ai-harness/key-store';
+import {loadKey, saveKey} from '../lib/ai-harness/key-store';
 import {loadHistory, saveHistory} from '../lib/ai-harness/history-store';
 import {
-    loadPrefs, savePrefs, clampPosition, defaultPosition, HEADER_H, DEFAULT_CARD_H
+    loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
+    HEADER_H, DEFAULT_CARD_H, DEFAULT_W
 } from '../lib/ai-harness/ui-prefs';
 
 class VibePrompt extends React.Component {
@@ -22,13 +23,17 @@ class VibePrompt extends React.Component {
             'handleInstructionDraftChange',
             'handleSubmitKey',
             'handleSubmitInstruction',
-            'handleResetKey',
             'handleChipClick',
             'handleRetry',
             'handleToggleCollapse',
             'handleDragStop',
             'handleResize',
-            'handleClearHistory'
+            'handleClearHistory',
+            'handleEditKey',
+            'handleBackFromKey',
+            'handleResizeStart',
+            'handleResizeMove',
+            'handleResizeStop'
         ]);
         const history = loadHistory();
         this.nextHistoryId = history.length ? Math.max(...history.map(e => e.id)) + 1 : 0;
@@ -40,15 +45,21 @@ class VibePrompt extends React.Component {
         const position = prefs ?
             clampPosition({x: prefs.x, y: prefs.y}, viewport, collapsed ? HEADER_H : DEFAULT_CARD_H) :
             defaultPosition(viewport);
+        const size = {
+            w: (prefs && prefs.w) ? prefs.w : DEFAULT_W,
+            h: (prefs && prefs.h) ? prefs.h : null // null = content-driven until resized
+        };
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
             instructionDraft: '',
             busy: false,
             error: false,
+            editingKey: false,
             lastInstruction: null,
             collapsed,
             position,
+            size,
             history
         };
     }
@@ -59,6 +70,8 @@ class VibePrompt extends React.Component {
     }
     componentWillUnmount () {
         window.removeEventListener('resize', this.handleResize);
+        window.removeEventListener('mousemove', this.handleResizeMove);
+        window.removeEventListener('mouseup', this.handleResizeStop);
     }
     handleResize () {
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
@@ -92,12 +105,17 @@ class VibePrompt extends React.Component {
             this.setState({error: true});
             return;
         }
-        this.setState({apiKey: key, keyDraft: '', error: false});
+        this.setState({apiKey: key, keyDraft: '', error: false, editingKey: false});
     }
-    handleResetKey () {
+    handleEditKey () {
+        // Switch to the key-entry screen WITHOUT clearing the current key, so the
+        // child can back out (handleBackFromKey) and keep their existing key.
         if (this.state.busy) return;
-        clearKey();
-        this.setState({apiKey: '', error: false});
+        this.setState({editingKey: true, keyDraft: '', error: false});
+    }
+    handleBackFromKey () {
+        // Cancel key editing and return to the instruction view (key preserved).
+        this.setState({editingKey: false, keyDraft: '', error: false});
     }
     handleToggleCollapse () {
         this.setState(prevState => {
@@ -108,8 +126,9 @@ class VibePrompt extends React.Component {
                 prevState.position :
                 clampPosition(prevState.position, viewport, DEFAULT_CARD_H);
             // savePrefs defaults to window.localStorage (guarded), matching how
-            // the container calls saveKey — no explicit storage arg.
-            savePrefs({...position, collapsed});
+            // the container calls saveKey — no explicit storage arg. Carry size so
+            // a collapse/drag never drops a stored width/height.
+            savePrefs({...position, collapsed, w: prevState.size.w, h: prevState.size.h});
             return {collapsed, position};
         });
     }
@@ -118,9 +137,32 @@ class VibePrompt extends React.Component {
         // the resting spot. clampPosition is the load-time guard for stale coords.
         const position = {x: data.x, y: data.y};
         this.setState(prevState => {
-            savePrefs({...position, collapsed: prevState.collapsed});
+            savePrefs({...position, collapsed: prevState.collapsed, w: prevState.size.w, h: prevState.size.h});
             return {position};
         });
+    }
+    handleResizeStart (e) {
+        // Bottom-right corner drag. Mouse position maps directly to the card's
+        // width/height because the card's top-left is at state.position (the
+        // Draggable position is relative to the viewport-anchored overlay).
+        e.preventDefault();
+        e.stopPropagation();
+        window.addEventListener('mousemove', this.handleResizeMove);
+        window.addEventListener('mouseup', this.handleResizeStop);
+    }
+    handleResizeMove (e) {
+        const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
+        const size = clampSize({
+            w: e.clientX - this.state.position.x,
+            h: e.clientY - this.state.position.y
+        }, viewport);
+        this.setState({size});
+    }
+    handleResizeStop () {
+        window.removeEventListener('mousemove', this.handleResizeMove);
+        window.removeEventListener('mouseup', this.handleResizeStop);
+        const {position, collapsed, size} = this.state;
+        savePrefs({...position, collapsed, w: size.w, h: size.h});
     }
     runInstruction (instruction, targetId) {
         // Enforce the busy invariant in the primitive itself, not only in the
@@ -199,22 +241,26 @@ class VibePrompt extends React.Component {
         return (
             <VibePromptComponent
                 busy={this.state.busy}
+                canCancelKey={Boolean(this.state.apiKey)}
                 error={this.state.error}
-                hasKey={Boolean(this.state.apiKey)}
+                hasKey={Boolean(this.state.apiKey) && !this.state.editingKey}
                 instructionDraft={this.state.instructionDraft}
                 keyDraft={this.state.keyDraft}
                 onInstructionDraftChange={this.handleInstructionDraftChange}
                 onKeyDraftChange={this.handleKeyDraftChange}
                 collapsed={this.state.collapsed}
                 position={this.state.position}
+                size={this.state.size}
                 history={this.state.history}
                 vm={this.props.vm}
-                onResetKey={this.handleResetKey}
+                onCancelKey={this.handleBackFromKey}
+                onEditKey={this.handleEditKey}
                 onChipClick={this.handleChipClick}
                 onClearHistory={this.handleClearHistory}
                 onRetry={this.handleRetry}
                 onToggleCollapse={this.handleToggleCollapse}
                 onDragStop={this.handleDragStop}
+                onResizeStart={this.handleResizeStart}
                 onSubmitInstruction={this.handleSubmitInstruction}
                 onSubmitKey={this.handleSubmitKey}
             />

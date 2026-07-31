@@ -251,17 +251,49 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.keyDraft).toBe('sk-ant-x');
         });
 
-        test('reset clears the key, but is blocked while busy', () => {
+        test('edit-key switches to editing mode WITHOUT clearing the key, blocked while busy', () => {
             const vm = makeVm({});
             const wrapper = render(vm);
             wrapper.setState({busy: true});
-            wrapper.instance().handleResetKey();
-            expect(clearKey).not.toHaveBeenCalled(); // blocked during a request
+            wrapper.instance().handleEditKey();
+            expect(wrapper.instance().state.editingKey).toBe(false); // blocked during a request
 
             wrapper.setState({busy: false});
-            wrapper.instance().handleResetKey();
-            expect(clearKey).toHaveBeenCalled();
-            expect(wrapper.instance().state.apiKey).toBe('');
+            wrapper.instance().handleEditKey();
+            expect(wrapper.instance().state.editingKey).toBe(true);
+            expect(wrapper.instance().state.apiKey).toBe('sk-ant-test'); // key preserved
+        });
+
+        test('back-from-key cancels editing and keeps the key', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({editingKey: true});
+            wrapper.instance().handleBackFromKey();
+            expect(wrapper.instance().state.editingKey).toBe(false);
+            expect(wrapper.instance().state.apiKey).toBe('sk-ant-test');
+        });
+    });
+
+    describe('card resize', () => {
+        test('resize-move sets size from mouse position relative to the card top-left', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({position: {x: 100, y: 80}});
+            wrapper.instance().handleResizeMove({clientX: 460, clientY: 400});
+            const {w, h} = wrapper.instance().state.size;
+            expect(w).toBe(360); // 460 - 100
+            expect(h).toBe(320); // 400 - 80
+        });
+
+        test('resize-stop persists the size', () => {
+            const vm = makeVm({});
+            const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
+            const wrapper = render(vm);
+            wrapper.setState({position: {x: 0, y: 0}, size: {w: 360, h: 300}});
+            wrapper.instance().handleResizeStop();
+            expect(saveSpy).toHaveBeenCalledWith(
+                expect.objectContaining({w: 360, h: 300})
+            );
         });
     });
 
