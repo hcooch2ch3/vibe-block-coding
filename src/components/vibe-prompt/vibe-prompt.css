@@ -282,22 +282,23 @@
     z-index: 1;
 }
 
-/* edges */
-.rhN { top: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
-.rhS { bottom: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
-.rhE { right: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
-.rhW { left: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+/* edges — grips are sized for finger targets on tablets, not just the mouse.
+   The corner offset (20px) keeps edge strips clear of the corner grips. */
+.rhN { top: 0; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
+.rhS { bottom: 0; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
+.rhE { right: 0; top: 20px; bottom: 20px; width: 10px; cursor: ew-resize; }
+.rhW { left: 0; top: 20px; bottom: 20px; width: 10px; cursor: ew-resize; }
 
 /* corners (drawn after edges so they win the overlap) */
-.rhNe { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
-.rhNw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
-.rhSw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.rhNe { top: 0; right: 0; width: 20px; height: 20px; cursor: nesw-resize; }
+.rhNw { top: 0; left: 0; width: 20px; height: 20px; cursor: nwse-resize; }
+.rhSw { bottom: 0; left: 0; width: 20px; height: 20px; cursor: nesw-resize; }
 
 .rhSe {
     bottom: 0;
     right: 0;
-    width: 12px;
-    height: 12px;
+    width: 20px;
+    height: 20px;
     cursor: nwse-resize;
 }
 

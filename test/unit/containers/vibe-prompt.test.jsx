@@ -295,6 +295,18 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.size).toEqual({w: 340, h: 340}); // 400-60, 500-160
         });
 
+        test('resize-move reads coordinates from a touch event (tablet)', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({position: {x: 100, y: 80}});
+            wrapper.instance().resizeCtx = {dir: 'se', left: 100, top: 80, right: 400, bottom: 400};
+            // A TouchEvent carries no clientX/clientY on itself — the point lives in
+            // touches[0]. The handler must read from there for tablet resize to work.
+            wrapper.instance().handleResizeMove({touches: [{clientX: 460, clientY: 500}]});
+            expect(wrapper.instance().state.size).toEqual({w: 360, h: 420}); // 460-100, 500-80
+            expect(wrapper.instance().state.position).toEqual({x: 100, y: 80}); // top-left fixed
+        });
+
         test('resize-stop persists the size', () => {
             const vm = makeVm({});
             const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);

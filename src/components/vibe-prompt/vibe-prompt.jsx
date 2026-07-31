@@ -338,6 +338,7 @@ const VibePromptComponent = props => {
                             className={classNames(styles.resizeHandle, styles[handle.cls], 'vibe-no-drag')}
                             data-dir={handle.dir}
                             onMouseDown={onResizeStart}
+                            onTouchStart={onResizeStart}
                         />
                     ))}
                 </div>

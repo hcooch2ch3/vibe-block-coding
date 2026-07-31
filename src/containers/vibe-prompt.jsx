@@ -79,8 +79,16 @@ class VibePrompt extends React.Component {
     }
     componentWillUnmount () {
         window.removeEventListener('resize', this.handleResize);
+        this.removeResizeListeners();
+    }
+    removeResizeListeners () {
+        // removeEventListener on a listener that was never added is a no-op, so we
+        // can drop both the mouse and touch pairs unconditionally.
         window.removeEventListener('mousemove', this.handleResizeMove);
         window.removeEventListener('mouseup', this.handleResizeStop);
+        window.removeEventListener('touchmove', this.handleResizeMove);
+        window.removeEventListener('touchend', this.handleResizeStop);
+        window.removeEventListener('touchcancel', this.handleResizeStop);
     }
     handleResize () {
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
@@ -163,18 +171,30 @@ class VibePrompt extends React.Component {
         const dir = e.currentTarget.dataset.dir || 'se';
         const rect = e.currentTarget.parentNode.getBoundingClientRect();
         this.resizeCtx = {dir, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom};
-        window.addEventListener('mousemove', this.handleResizeMove);
-        window.addEventListener('mouseup', this.handleResizeStop);
+        if (e.touches) {
+            // passive:false so the touchmove handler is allowed to preventDefault
+            // and stop the page from scrolling under the finger while resizing.
+            window.addEventListener('touchmove', this.handleResizeMove, {passive: false});
+            window.addEventListener('touchend', this.handleResizeStop);
+            window.addEventListener('touchcancel', this.handleResizeStop);
+        } else {
+            window.addEventListener('mousemove', this.handleResizeMove);
+            window.addEventListener('mouseup', this.handleResizeStop);
+        }
     }
     handleResizeMove (e) {
         const ctx = this.resizeCtx;
         if (!ctx) return;
+        // A touch event carries its point in touches[0], not on the event itself.
+        const p = e.touches ? e.touches[0] : e;
+        // On touch, block the page scroll/zoom while dragging a grip.
+        if (e.touches && e.cancelable) e.preventDefault();
         const d = ctx.dir;
         let {left, top, right, bottom} = ctx;
-        if (d.indexOf('e') >= 0) right = e.clientX;
-        if (d.indexOf('w') >= 0) left = e.clientX;
-        if (d.indexOf('s') >= 0) bottom = e.clientY;
-        if (d.indexOf('n') >= 0) top = e.clientY;
+        if (d.indexOf('e') >= 0) right = p.clientX;
+        if (d.indexOf('w') >= 0) left = p.clientX;
+        if (d.indexOf('s') >= 0) bottom = p.clientY;
+        if (d.indexOf('n') >= 0) top = p.clientY;
         // keep the card on-screen (below the menu bar), then enforce the minimum
         // by pushing the MOVING edge, so the fixed edge never jumps.
         left = Math.max(EDGE_MARGIN, Math.min(left, window.innerWidth - EDGE_MARGIN));
@@ -190,8 +210,7 @@ class VibePrompt extends React.Component {
         this.setState({position: {x: left, y: top}, size: {w: right - left, h: bottom - top}});
     }
     handleResizeStop () {
-        window.removeEventListener('mousemove', this.handleResizeMove);
-        window.removeEventListener('mouseup', this.handleResizeStop);
+        this.removeResizeListeners();
         this.resizeCtx = null;
         const {position, collapsed, size} = this.state;
         savePrefs({...position, collapsed, w: size.w, h: size.h});
