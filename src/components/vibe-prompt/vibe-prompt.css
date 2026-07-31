@@ -281,14 +281,12 @@
 .rhNw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
 .rhSw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
 
-/* a subtle visible grip on the bottom-right corner for discoverability */
 .rhSe {
     bottom: 0;
     right: 0;
     width: 12px;
     height: 12px;
     cursor: nwse-resize;
-    background: linear-gradient(135deg, transparent 50%, #b9d6f2 50%);
 }
 
 /* When the card has a user-chosen height, let the body fill it and the history
