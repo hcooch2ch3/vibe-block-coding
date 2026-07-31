@@ -44,6 +44,9 @@
 .headerActions {
     display: flex;
     align-items: center;
+    /* sit above the top resize grips so the gear/collapse buttons stay clickable */
+    position: relative;
+    z-index: 2;
 }
 
 .collapseBtn {
@@ -251,21 +254,39 @@
 }
 
 .backBtn {
-    flex: 0 0 auto;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid #b9d6f2;
-    border-radius: 0.5rem;
-    background: white;
-    color: #575e75;
+    align-self: flex-start;
+    margin-bottom: 0.375rem;
+    padding: 0.125rem 0.25rem;
+    border: none;
+    background: transparent;
+    color: #4c97ff;
+    font-size: 0.8rem;
+    font-weight: bold;
     cursor: pointer;
 }
 
 .resizeHandle {
     position: absolute;
-    right: 0;
+    z-index: 1;
+}
+
+/* edges */
+.rhN { top: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.rhS { bottom: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.rhE { right: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.rhW { left: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+
+/* corners (drawn after edges so they win the overlap) */
+.rhNe { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.rhNw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.rhSw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+
+/* a subtle visible grip on the bottom-right corner for discoverability */
+.rhSe {
     bottom: 0;
-    width: 16px;
-    height: 16px;
+    right: 0;
+    width: 12px;
+    height: 12px;
     cursor: nwse-resize;
     background: linear-gradient(135deg, transparent 50%, #b9d6f2 50%);
 }

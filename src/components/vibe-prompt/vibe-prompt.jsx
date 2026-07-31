@@ -127,6 +127,14 @@ ChipButton.propTypes = {
     onClick: PropTypes.func.isRequired
 };
 
+// Every edge + corner is a resize grip. Corners come last so they paint over the
+// edge strips they overlap. Class names are camelCase to survive css-loader's
+// locals conversion (bracket access on underscore names is not portable).
+const RESIZE_HANDLES = [
+    {dir: 'n', cls: 'rhN'}, {dir: 's', cls: 'rhS'}, {dir: 'e', cls: 'rhE'}, {dir: 'w', cls: 'rhW'},
+    {dir: 'ne', cls: 'rhNe'}, {dir: 'nw', cls: 'rhNw'}, {dir: 'se', cls: 'rhSe'}, {dir: 'sw', cls: 'rhSw'}
+];
+
 const VibePromptComponent = props => {
     const {
         intl, hasKey, busy, error,
@@ -145,6 +153,15 @@ const VibePromptComponent = props => {
 
     const keyEntry = (
         <div className={styles.body}>
+            {canCancelKey && (
+                <button
+                    className={styles.backBtn}
+                    type="button"
+                    onClick={onCancelKey}
+                >
+                    {'‹ '}{intl.formatMessage(messages.back)}
+                </button>
+            )}
             <form
                 className={styles.row}
                 onSubmit={onSubmitKey}
@@ -167,16 +184,6 @@ const VibePromptComponent = props => {
                 >
                     {intl.formatMessage(messages.saveKey)}
                 </button>
-                {canCancelKey && (
-                    <button
-                        className={styles.backBtn}
-                        type="button"
-                        title={intl.formatMessage(messages.back)}
-                        onClick={onCancelKey}
-                    >
-                        {intl.formatMessage(messages.back)}
-                    </button>
-                )}
             </form>
             <div className={styles.notice}>
                 {intl.formatMessage(messages.keyNotice)}
@@ -325,12 +332,14 @@ const VibePromptComponent = props => {
                         </span>
                     </div>
                     {collapsed ? null : body}
-                    {collapsed ? null : (
+                    {collapsed ? null : RESIZE_HANDLES.map(handle => (
                         <div
-                            className={classNames(styles.resizeHandle, 'vibe-no-drag')}
+                            key={handle.dir}
+                            className={classNames(styles.resizeHandle, styles[handle.cls], 'vibe-no-drag')}
+                            data-dir={handle.dir}
                             onMouseDown={onResizeStart}
                         />
-                    )}
+                    ))}
                 </div>
             </Draggable>
         </div>

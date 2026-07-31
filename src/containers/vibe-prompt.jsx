@@ -11,8 +11,8 @@ import {diff} from '../lib/ai-harness/edit';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
 import {loadHistory, saveHistory} from '../lib/ai-harness/history-store';
 import {
-    loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
-    HEADER_H, DEFAULT_CARD_H, DEFAULT_W
+    loadPrefs, savePrefs, clampPosition, defaultPosition,
+    HEADER_H, DEFAULT_CARD_H, DEFAULT_W, MIN_W, MIN_H, EDGE_MARGIN, MENU_BAR_TOP
 } from '../lib/ai-harness/ui-prefs';
 
 class VibePrompt extends React.Component {
@@ -142,25 +142,44 @@ class VibePrompt extends React.Component {
         });
     }
     handleResizeStart (e) {
-        // Bottom-right corner drag. Mouse position maps directly to the card's
-        // width/height because the card's top-left is at state.position (the
-        // Draggable position is relative to the viewport-anchored overlay).
+        // Any edge/corner can resize. `data-dir` (n/s/e/w combos) says which sides
+        // move; the opposite sides stay fixed. Capture the card's real rectangle
+        // now (getBoundingClientRect handles content-driven auto-height correctly).
         e.preventDefault();
         e.stopPropagation();
+        const dir = e.currentTarget.dataset.dir || 'se';
+        const rect = e.currentTarget.parentNode.getBoundingClientRect();
+        this.resizeCtx = {dir, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom};
         window.addEventListener('mousemove', this.handleResizeMove);
         window.addEventListener('mouseup', this.handleResizeStop);
     }
     handleResizeMove (e) {
-        const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
-        const size = clampSize({
-            w: e.clientX - this.state.position.x,
-            h: e.clientY - this.state.position.y
-        }, viewport);
-        this.setState({size});
+        const ctx = this.resizeCtx;
+        if (!ctx) return;
+        const d = ctx.dir;
+        let {left, top, right, bottom} = ctx;
+        if (d.indexOf('e') >= 0) right = e.clientX;
+        if (d.indexOf('w') >= 0) left = e.clientX;
+        if (d.indexOf('s') >= 0) bottom = e.clientY;
+        if (d.indexOf('n') >= 0) top = e.clientY;
+        // keep the card on-screen (below the menu bar), then enforce the minimum
+        // by pushing the MOVING edge, so the fixed edge never jumps.
+        left = Math.max(EDGE_MARGIN, Math.min(left, window.innerWidth - EDGE_MARGIN));
+        right = Math.min(window.innerWidth - EDGE_MARGIN, Math.max(right, EDGE_MARGIN));
+        top = Math.max(MENU_BAR_TOP, Math.min(top, window.innerHeight - EDGE_MARGIN));
+        bottom = Math.min(window.innerHeight - EDGE_MARGIN, Math.max(bottom, MENU_BAR_TOP));
+        if (right - left < MIN_W) {
+            if (d.indexOf('w') >= 0) left = right - MIN_W; else right = left + MIN_W;
+        }
+        if (bottom - top < MIN_H) {
+            if (d.indexOf('n') >= 0) top = bottom - MIN_H; else bottom = top + MIN_H;
+        }
+        this.setState({position: {x: left, y: top}, size: {w: right - left, h: bottom - top}});
     }
     handleResizeStop () {
         window.removeEventListener('mousemove', this.handleResizeMove);
         window.removeEventListener('mouseup', this.handleResizeStop);
+        this.resizeCtx = null;
         const {position, collapsed, size} = this.state;
         savePrefs({...position, collapsed, w: size.w, h: size.h});
     }

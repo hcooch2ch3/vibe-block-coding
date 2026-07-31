@@ -275,14 +275,24 @@ describe('VibePrompt container', () => {
     });
 
     describe('card resize', () => {
-        test('resize-move sets size from mouse position relative to the card top-left', () => {
+        test('resize-move from the SE corner grows width/height, position fixed', () => {
             const vm = makeVm({});
             const wrapper = render(vm);
             wrapper.setState({position: {x: 100, y: 80}});
-            wrapper.instance().handleResizeMove({clientX: 460, clientY: 400});
-            const {w, h} = wrapper.instance().state.size;
-            expect(w).toBe(360); // 460 - 100
-            expect(h).toBe(320); // 400 - 80
+            wrapper.instance().resizeCtx = {dir: 'se', left: 100, top: 80, right: 400, bottom: 400};
+            wrapper.instance().handleResizeMove({clientX: 460, clientY: 500});
+            expect(wrapper.instance().state.size).toEqual({w: 360, h: 420}); // 460-100, 500-80
+            expect(wrapper.instance().state.position).toEqual({x: 100, y: 80}); // top-left fixed
+        });
+
+        test('resize-move from the NW corner moves the top-left and keeps the far edges', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.instance().resizeCtx = {dir: 'nw', left: 100, top: 200, right: 400, bottom: 500};
+            wrapper.instance().handleResizeMove({clientX: 60, clientY: 160});
+            // far edges (right 400 / bottom 500) stay; top-left follows the mouse
+            expect(wrapper.instance().state.position).toEqual({x: 60, y: 160});
+            expect(wrapper.instance().state.size).toEqual({w: 340, h: 340}); // 400-60, 500-160
         });
 
         test('resize-stop persists the size', () => {
