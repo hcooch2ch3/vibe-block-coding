@@ -9,6 +9,7 @@ import {saveKey, clearKey} from '../../../src/lib/ai-harness/key-store';
 import * as devConsole from '../../../src/lib/ai-harness/dev-console';
 import * as dsl from '../../../src/lib/ai-harness/dsl';
 import * as uiPrefs from '../../../src/lib/ai-harness/ui-prefs';
+import * as historyStore from '../../../src/lib/ai-harness/history-store';
 
 // The real dsl.decompile is covered by test/unit/ai-harness/dsl.test.js; here it
 // is mocked so these tests isolate the container's routing/guard logic. The mock
@@ -315,6 +316,73 @@ describe('VibePrompt container', () => {
             const {x, y} = wrapper.instance().state.position;
             expect(x).toBeLessThan(5000);
             expect(y).toBeLessThan(5000);
+        });
+    });
+
+    describe('chat history', () => {
+        test('a successful generate appends a done entry with added changes', async () => {
+            const vm = makeVm({});
+            jest.spyOn(historyStore, 'loadHistory').mockReturnValue([]);
+            const saveSpy = jest.spyOn(historyStore, 'saveHistory').mockReturnValue(true);
+            jest.spyOn(dsl, 'decompile').mockReturnValue([]);
+            jest.spyOn(devConsole, 'generate')
+                .mockImplementation(() => Promise.resolve([{hat: 'when_flag', body: [['move', 10]]}]));
+            const wrapper = render(vm);
+            wrapper.setState({instructionDraft: 'walk'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            const {history} = wrapper.instance().state;
+            expect(history).toHaveLength(1);
+            expect(history[0].status).toBe('done');
+            expect(history[0].instruction).toBe('walk');
+            expect(history[0].changes).toEqual([
+                {kind: 'added', script: {hat: 'when_flag', body: [['move', 10]]}}
+            ]);
+            expect(saveSpy).toHaveBeenCalled();
+        });
+
+        test('a failed request appends a failed entry with no changes', async () => {
+            const vm = makeVm({});
+            jest.spyOn(historyStore, 'loadHistory').mockReturnValue([]);
+            jest.spyOn(historyStore, 'saveHistory').mockReturnValue(true);
+            jest.spyOn(dsl, 'decompile').mockReturnValue([]);
+            jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.reject(new Error('401')));
+            const wrapper = render(vm);
+            wrapper.setState({instructionDraft: 'walk'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            const {history} = wrapper.instance().state;
+            expect(history).toHaveLength(1);
+            expect(history[0].status).toBe('failed');
+            expect(history[0].changes).toEqual([]);
+        });
+
+        test('nextHistoryId is seeded from loaded history (no id collision)', async () => {
+            const vm = makeVm({});
+            jest.spyOn(historyStore, 'loadHistory').mockReturnValue([
+                {id: 7, instruction: 'old', changes: [], status: 'done'}
+            ]);
+            jest.spyOn(historyStore, 'saveHistory').mockReturnValue(true);
+            jest.spyOn(dsl, 'decompile').mockReturnValue([]);
+            jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.setState({instructionDraft: 'x'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            const {history} = wrapper.instance().state;
+            expect(history[history.length - 1].id).toBe(8);
+        });
+
+        test('clear empties history and persists', () => {
+            const vm = makeVm({});
+            jest.spyOn(historyStore, 'loadHistory').mockReturnValue([
+                {id: 0, instruction: 'a', changes: [], status: 'done'}
+            ]);
+            const saveSpy = jest.spyOn(historyStore, 'saveHistory').mockReturnValue(true);
+            const wrapper = render(vm);
+            wrapper.instance().handleClearHistory();
+            expect(wrapper.instance().state.history).toEqual([]);
+            expect(saveSpy).toHaveBeenCalledWith([]);
         });
     });
 

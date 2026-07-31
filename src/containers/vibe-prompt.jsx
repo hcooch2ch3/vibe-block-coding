@@ -7,7 +7,9 @@ import VM from 'scratch-vm';
 import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
 import {generate, edit} from '../lib/ai-harness/dev-console';
 import {decompile} from '../lib/ai-harness/dsl';
+import {diff} from '../lib/ai-harness/edit';
 import {loadKey, saveKey, clearKey} from '../lib/ai-harness/key-store';
+import {loadHistory, saveHistory} from '../lib/ai-harness/history-store';
 import {
     loadPrefs, savePrefs, clampPosition, defaultPosition, HEADER_H, DEFAULT_CARD_H
 } from '../lib/ai-harness/ui-prefs';
@@ -25,8 +27,11 @@ class VibePrompt extends React.Component {
             'handleRetry',
             'handleToggleCollapse',
             'handleDragStop',
-            'handleResize'
+            'handleResize',
+            'handleClearHistory'
         ]);
+        const history = loadHistory();
+        this.nextHistoryId = history.length ? Math.max(...history.map(e => e.id)) + 1 : 0;
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
         const prefs = loadPrefs();
         const collapsed = prefs ? prefs.collapsed : false;
@@ -43,7 +48,8 @@ class VibePrompt extends React.Component {
             error: false,
             lastInstruction: null,
             collapsed,
-            position
+            position,
+            history
         };
     }
     componentDidMount () {
@@ -128,22 +134,47 @@ class VibePrompt extends React.Component {
         this.setState({busy: true, error: false});
         // Detection (decompile) can throw on non-OPMAP blocks — keep it inside
         // the chain so any throw lands in .catch and shows the friendly error.
+        let before = [];
         return Promise.resolve()
             .then(() => {
                 // fail-closed: never fall back to editingTarget if the pinned
                 // sprite was deleted mid-request (would edit the wrong sprite).
                 const target = vm.runtime.getTargetById(targetId);
                 if (!target) throw new Error('vibe: pinned sprite no longer exists');
-                const isEmpty = decompile(target.blocks).length === 0;
+                before = decompile(target.blocks);
+                const isEmpty = before.length === 0;
                 const run = isEmpty ? generate : edit;
                 return run(vm, {apiKey, instruction, targetId});
             })
-            .then(() => this.setState({busy: false, instructionDraft: ''}))
+            .then(after => {
+                this.appendHistory(instruction, before, after, 'done');
+                this.setState({busy: false, instructionDraft: ''});
+            })
             .catch(err => {
                 // eslint-disable-next-line no-console
                 console.error('[vibe] request failed:', err);
+                this.appendHistory(instruction, [], [], 'failed');
                 this.setState({busy: false, error: true});
             });
+    }
+    appendHistory (instruction, before, after, status) {
+        let changes = [];
+        if (status === 'done') {
+            changes = diff(before, after).reduce((acc, op) => {
+                if (op.type === 'add') acc.push({kind: 'added', script: op.script});
+                else if (op.type === 'replace') acc.push({kind: 'updated', script: op.script});
+                else if (op.type === 'remove') acc.push({kind: 'removed', script: before[op.index]});
+                return acc;
+            }, []);
+        }
+        const entry = {id: this.nextHistoryId++, instruction, changes, status};
+        const history = this.state.history.concat(entry);
+        saveHistory(history);
+        this.setState({history});
+    }
+    handleClearHistory () {
+        saveHistory([]);
+        this.setState({history: []});
     }
     handleSubmitInstruction (e) {
         e.preventDefault();
@@ -176,8 +207,11 @@ class VibePrompt extends React.Component {
                 onKeyDraftChange={this.handleKeyDraftChange}
                 collapsed={this.state.collapsed}
                 position={this.state.position}
+                history={this.state.history}
+                vm={this.props.vm}
                 onResetKey={this.handleResetKey}
                 onChipClick={this.handleChipClick}
+                onClearHistory={this.handleClearHistory}
                 onRetry={this.handleRetry}
                 onToggleCollapse={this.handleToggleCollapse}
                 onDragStop={this.handleDragStop}
