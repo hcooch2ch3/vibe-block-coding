@@ -29,6 +29,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* fixed content height so the header doesn't shrink when the ⚙ button is
+       hidden (key-editing mode) — the emoji buttons drive the natural height. */
+    min-height: 1.5rem;
     padding: 0.375rem 0.625rem;
     background: #4c97ff;
     color: white;
