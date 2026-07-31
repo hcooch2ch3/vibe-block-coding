@@ -349,6 +349,16 @@ describe('VibePrompt container', () => {
             );
         });
 
+        test('a stored oversized/negative size is clamped into bounds on load', () => {
+            const vm = makeVm({});
+            jest.spyOn(uiPrefs, 'loadPrefs').mockReturnValue({x: 8, y: 48, collapsed: false, w: 99999, h: -50});
+            const wrapper = render(vm);
+            const {w, h} = wrapper.instance().state.size;
+            expect(w).toBeLessThan(99999);
+            expect(w).toBeGreaterThanOrEqual(240); // MIN_W
+            expect(h).toBeGreaterThanOrEqual(160); // MIN_H (negative height clamped up)
+        });
+
         test('window resize re-clamps a now-off-screen card back into view', () => {
             const vm = makeVm({});
             jest.spyOn(uiPrefs, 'loadPrefs').mockReturnValue(null);
@@ -413,6 +423,24 @@ describe('VibePrompt container', () => {
             await flushPromises();
             const {history} = wrapper.instance().state;
             expect(history[history.length - 1].id).toBe(8);
+        });
+
+        test('a corrupt non-numeric id does not poison nextHistoryId', async () => {
+            const vm = makeVm({});
+            jest.spyOn(historyStore, 'loadHistory').mockReturnValue([
+                {id: 'bad', instruction: 'x', changes: [], status: 'done'}
+            ]);
+            jest.spyOn(historyStore, 'saveHistory').mockReturnValue(true);
+            jest.spyOn(dsl, 'decompile').mockReturnValue([]);
+            jest.spyOn(devConsole, 'generate').mockImplementation(() => Promise.resolve([]));
+            const wrapper = render(vm);
+            wrapper.setState({instructionDraft: 'go'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            const {history} = wrapper.instance().state;
+            const last = history[history.length - 1];
+            expect(Number.isFinite(last.id)).toBe(true);
+            expect(last.id).toBe(0); // no finite ids present → counter starts at 0
         });
 
         test('clear empties history and persists', () => {

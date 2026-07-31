@@ -11,7 +11,7 @@ import {diff} from '../lib/ai-harness/edit';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
 import {loadHistory, saveHistory} from '../lib/ai-harness/history-store';
 import {
-    loadPrefs, savePrefs, clampPosition, defaultPosition,
+    loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
     HEADER_H, DEFAULT_CARD_H, DEFAULT_W, MIN_W, MIN_H, EDGE_MARGIN, MENU_BAR_TOP
 } from '../lib/ai-harness/ui-prefs';
 
@@ -36,7 +36,10 @@ class VibePrompt extends React.Component {
             'handleResizeStop'
         ]);
         const history = loadHistory();
-        this.nextHistoryId = history.length ? Math.max(...history.map(e => e.id)) + 1 : 0;
+        // seed the id counter from the max EXISTING numeric id (a corrupt/legacy
+        // non-numeric id would otherwise make Math.max NaN → duplicate React keys).
+        const ids = history.map(e => e.id).filter(Number.isFinite);
+        this.nextHistoryId = ids.length ? Math.max(...ids) + 1 : 0;
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
         const prefs = loadPrefs();
         const collapsed = prefs ? prefs.collapsed : false;
@@ -45,10 +48,16 @@ class VibePrompt extends React.Component {
         const position = prefs ?
             clampPosition({x: prefs.x, y: prefs.y}, viewport, collapsed ? HEADER_H : DEFAULT_CARD_H) :
             defaultPosition(viewport);
-        const size = {
+        let size = {
             w: (prefs && prefs.w) ? prefs.w : DEFAULT_W,
             h: (prefs && prefs.h) ? prefs.h : null // null = content-driven until resized
         };
+        // Clamp a stored size into the current viewport (and guard corrupt/legacy
+        // negative or oversized values) so a card saved on a big screen or a bad
+        // write can't load off-screen or broken.
+        const maxLoadW = Math.max(MIN_W, viewport.innerWidth - (2 * EDGE_MARGIN));
+        size.w = Math.max(MIN_W, Math.min(size.w, maxLoadW));
+        if (size.h) size = clampSize(size, viewport);
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
@@ -75,13 +84,17 @@ class VibePrompt extends React.Component {
     }
     handleResize () {
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
-        this.setState(prevState => ({
-            position: clampPosition(
-                prevState.position,
-                viewport,
-                prevState.collapsed ? HEADER_H : DEFAULT_CARD_H
-            )
-        }));
+        this.setState(prevState => {
+            let size = prevState.size;
+            if (size.h) {
+                size = clampSize(size, viewport); // a resized card follows the new viewport
+            } else {
+                const maxW = Math.max(MIN_W, viewport.innerWidth - (2 * EDGE_MARGIN));
+                if (size.w > maxW) size = {w: maxW, h: null};
+            }
+            const clampH = size.h || (prevState.collapsed ? HEADER_H : DEFAULT_CARD_H);
+            return {size, position: clampPosition(prevState.position, viewport, clampH)};
+        });
     }
     handleKeyDraftChange (e) {
         this.setState({keyDraft: e.target.value, error: false});

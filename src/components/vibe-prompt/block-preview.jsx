@@ -47,6 +47,12 @@ class BlockPreview extends React.Component {
     tryRender () {
         const SB = getScratchBlocks(this.props.vm);
         if (!SB || !this.ref) return; // fail closed → placeholder stays
+        // scratch-blocks is a global singleton shared with the live editor, and
+        // inject() unconditionally repoints Blockly.mainWorkspace at whatever it
+        // just created. Snapshot the editor's workspace and restore it after, so
+        // document-level resize/keyboard handlers keep targeting the real canvas
+        // rather than this read-only preview.
+        const prevMain = SB.mainWorkspace;
         try {
             this.ws = SB.inject(this.ref, {
                 readOnly: true,
@@ -56,7 +62,16 @@ class BlockPreview extends React.Component {
             });
             SB.Xml.domToWorkspace(SB.Xml.textToDom(scriptToXml(this.props.script)), this.ws);
         } catch (e) {
-            this.ws = null; // fail closed
+            // fail closed — and dispose a workspace that injected before the throw
+            // so the defensive path can't leak DOM/listeners.
+            if (this.ws) {
+                try {
+                    this.ws.dispose();
+                } catch (e2) { /* already gone */ }
+            }
+            this.ws = null;
+        } finally {
+            if (prevMain) SB.mainWorkspace = prevMain;
         }
     }
     render () {
