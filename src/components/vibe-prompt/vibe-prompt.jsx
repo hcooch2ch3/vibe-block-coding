@@ -4,6 +4,7 @@ import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import classNames from 'classnames';
 import Draggable from 'react-draggable';
 
+import HistoryList from './history-list.jsx';
 import styles from './vibe-prompt.css';
 
 const messages = defineMessages({
@@ -128,7 +129,8 @@ const VibePromptComponent = props => {
         onKeyDraftChange, onInstructionDraftChange,
         onSubmitKey, onSubmitInstruction, onResetKey,
         onChipClick, onRetry,
-        collapsed, position, onToggleCollapse, onDragStop
+        collapsed, position, onToggleCollapse, onDragStop,
+        history, vm, onClearHistory
     } = props;
 
     const keyEntry = (
@@ -172,6 +174,11 @@ const VibePromptComponent = props => {
 
     const instructionEntry = (
         <div className={styles.body}>
+            <HistoryList
+                history={history}
+                vm={vm}
+                onClearHistory={onClearHistory}
+            />
             <form
                 className={styles.row}
                 onSubmit={onSubmitInstruction}
@@ -306,6 +313,7 @@ VibePromptComponent.defaultProps = {
     collapsed: false,
     error: false,
     hasKey: false,
+    history: [],
     instructionDraft: '',
     keyDraft: '',
     position: {x: 0, y: 0}
@@ -316,10 +324,12 @@ VibePromptComponent.propTypes = {
     collapsed: PropTypes.bool,
     error: PropTypes.bool,
     hasKey: PropTypes.bool,
+    history: PropTypes.array,
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
     onChipClick: PropTypes.func.isRequired,
+    onClearHistory: PropTypes.func,
     onDragStop: PropTypes.func.isRequired,
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
@@ -328,7 +338,8 @@ VibePromptComponent.propTypes = {
     onSubmitInstruction: PropTypes.func.isRequired,
     onSubmitKey: PropTypes.func.isRequired,
     onToggleCollapse: PropTypes.func.isRequired,
-    position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number})
+    position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number}),
+    vm: PropTypes.object
 };
 
 export default injectIntl(VibePromptComponent);

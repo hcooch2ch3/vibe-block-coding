@@ -197,3 +197,55 @@
     font-size: 0.9rem;
     line-height: 1;
 }
+
+.history {
+    margin-bottom: 0.5rem;
+}
+
+.historyHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+
+.historyNote {
+    font-size: 0.65rem;
+    color: #7d8397;
+}
+
+.clearBtn {
+    border: none;
+    background: transparent;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.historyScroll {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.historyRow {
+    padding: 0.375rem;
+    margin-bottom: 0.375rem;
+    background: white;
+    border-radius: 0.375rem;
+}
+
+.historyInstruction {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #575e75;
+    margin-bottom: 0.25rem;
+}
+
+.change {
+    margin-top: 0.25rem;
+}
+
+.changeLabel {
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: #575e75;
+}
