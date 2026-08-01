@@ -1,6 +1,7 @@
 import {
     loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
-    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN, MENU_BAR_TOP, MIN_W, MIN_H
+    STORAGE_KEY, CARD_WIDTH, HEADER_H, EDGE_MARGIN, MENU_BAR_TOP, MIN_W, MIN_H,
+    DEFAULT_CONTEXT_TURNS
 } from '../../../src/lib/ai-harness/ui-prefs';
 
 const makeStorage = initial => {
@@ -25,7 +26,7 @@ describe('ui-prefs', () => {
         test('round-trips a saved prefs object (size defaults to null)', () => {
             const storage = makeStorage();
             savePrefs({x: 12, y: 34, collapsed: true}, storage);
-            expect(loadPrefs(storage)).toEqual({x: 12, y: 34, collapsed: true, w: null, h: null});
+            expect(loadPrefs(storage)).toEqual({x: 12, y: 34, collapsed: true, w: null, h: null, contextTurns: DEFAULT_CONTEXT_TURNS});
         });
         test('round-trips a saved size', () => {
             const storage = makeStorage();
@@ -110,6 +111,37 @@ describe('ui-prefs', () => {
             expect(pos.y).toBeLessThanOrEqual(vp.innerHeight - HEADER_H - EDGE_MARGIN);
             expect(pos.x).toBeGreaterThanOrEqual(EDGE_MARGIN);
             expect(pos.y).toBeGreaterThanOrEqual(EDGE_MARGIN);
+        });
+    });
+
+    describe('contextTurns', () => {
+        const mem = seed => {
+            const m = Object.assign({}, seed);
+            return {
+                getItem: k => (k in m ? m[k] : null),
+                setItem: (k, v) => {
+                    m[k] = v;
+                }
+            };
+        };
+
+        test('contextTurns round-trips and clamps 0..10', () => {
+            const s = mem();
+            savePrefs({x: 1, y: 2, collapsed: false, contextTurns: 99}, s);
+            expect(loadPrefs(s).contextTurns).toBe(10);
+            savePrefs({x: 1, y: 2, collapsed: false, contextTurns: -5}, s);
+            expect(loadPrefs(s).contextTurns).toBe(0);
+        });
+        test('contextTurns defaults when absent', () => {
+            const s = mem();
+            savePrefs({x: 1, y: 2, collapsed: false}, s);
+            expect(loadPrefs(s).contextTurns).toBe(DEFAULT_CONTEXT_TURNS);
+        });
+        test('saving still preserves x/y/size (regression: not a partial write)', () => {
+            const s = mem();
+            savePrefs({x: 5, y: 6, collapsed: true, w: 260, h: 200, contextTurns: 4}, s);
+            const p = loadPrefs(s);
+            expect(p).toMatchObject({x: 5, y: 6, w: 260, h: 200, contextTurns: 4});
         });
     });
 });

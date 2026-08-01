@@ -6,6 +6,9 @@
 
 export const STORAGE_KEY = 'vibe.ui.prefs';
 
+export const DEFAULT_CONTEXT_TURNS = 3;
+export const MAX_CONTEXT_TURNS = 10;
+
 // Nominal card geometry used to keep the draggable header reachable on-screen.
 // Exact rendered size varies (collapsed/error), so we clamp against the header,
 // which guarantees the child can always grab and move the card.
@@ -46,7 +49,12 @@ export const loadPrefs = function (storage = defaultStorage()) {
             // size is optional — width defaults on load, height stays content-driven
             // (null) until the child has resized. Only accept finite stored values.
             w: Number.isFinite(parsed.w) ? parsed.w : null,
-            h: Number.isFinite(parsed.h) ? parsed.h : null
+            h: Number.isFinite(parsed.h) ? parsed.h : null,
+            contextTurns: clamp(
+                Number.isFinite(parsed.contextTurns) ? parsed.contextTurns : DEFAULT_CONTEXT_TURNS,
+                0,
+                MAX_CONTEXT_TURNS
+            )
         };
     } catch (e) {
         return null;
@@ -68,6 +76,7 @@ export const savePrefs = function (prefs, storage = defaultStorage()) {
         };
         if (Number.isFinite(prefs.w)) out.w = prefs.w;
         if (Number.isFinite(prefs.h)) out.h = prefs.h;
+        if (Number.isFinite(prefs.contextTurns)) out.contextTurns = clamp(prefs.contextTurns, 0, MAX_CONTEXT_TURNS);
         storage.setItem(STORAGE_KEY, JSON.stringify(out));
         return true;
     } catch (e) {
