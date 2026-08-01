@@ -5,7 +5,25 @@ import classNames from 'classnames';
 import Draggable from 'react-draggable';
 
 import HistoryList from './history-list.jsx';
+import MemorySlider from './memory-slider.jsx';
 import styles from './vibe-prompt.css';
+
+const memoryMessages = defineMessages({
+    memoryLabel: {
+        id: 'vibe.prompt.memoryLabel',
+        defaultMessage: '💬 Conversation memory',
+        description: 'Label for the conversation-memory depth slider'
+    },
+    memoryHint: {
+        id: 'vibe.prompt.memoryHint',
+        defaultMessage: 'How many past turns the AI remembers.',
+        description: 'Hint under the conversation-memory slider'
+    }
+});
+
+// Module-level noop used as defaultProp for onContextTurnsChange (avoids
+// inline arrow in JSX which react/jsx-no-bind forbids).
+const noop = () => {};
 
 const messages = defineMessages({
     keyPlaceholder: {
@@ -144,7 +162,8 @@ const VibePromptComponent = props => {
         onChipClick, onRetry,
         collapsed, position, onToggleCollapse, onDragStop,
         turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
-        canCancelKey, onCancelKey, size, onResizeStart
+        canCancelKey, onCancelKey, size, onResizeStart,
+        contextTurns, onContextTurnsChange
     } = props;
 
     const sized = Boolean(size.h) && !collapsed;
@@ -196,6 +215,21 @@ const VibePromptComponent = props => {
                     {intl.formatMessage(messages.saveKeyError)}
                 </div>
             )}
+            <div className={styles.memoryRow}>
+                <label className={styles.memoryLabel}>
+                    {intl.formatMessage(memoryMessages.memoryLabel)}
+                </label>
+                <MemorySlider
+                    value={contextTurns}
+                    ariaLabel={intl.formatMessage(memoryMessages.memoryLabel)}
+                    className={styles.memorySlider}
+                    onChange={onContextTurnsChange}
+                />
+                <span className={styles.memoryValue}>{contextTurns}</span>
+                <div className={styles.notice}>
+                    {intl.formatMessage(memoryMessages.memoryHint)}
+                </div>
+            </div>
         </div>
     );
 
@@ -355,8 +389,10 @@ VibePromptComponent.defaultProps = {
     busy: false,
     canCancelKey: false,
     collapsed: false,
+    contextTurns: 3,
     error: false,
     hasKey: false,
+    onContextTurnsChange: noop,
     turns: [],
     instructionDraft: '',
     keyDraft: '',
@@ -368,6 +404,7 @@ VibePromptComponent.propTypes = {
     busy: PropTypes.bool,
     canCancelKey: PropTypes.bool,
     collapsed: PropTypes.bool,
+    contextTurns: PropTypes.number,
     error: PropTypes.bool,
     hasKey: PropTypes.bool,
     instructionDraft: PropTypes.string,
@@ -377,6 +414,7 @@ VibePromptComponent.propTypes = {
     onCancelKey: PropTypes.func,
     onChipClick: PropTypes.func.isRequired,
     onClearHistory: PropTypes.func,
+    onContextTurnsChange: PropTypes.func,
     onDragStop: PropTypes.func.isRequired,
     onEditKey: PropTypes.func.isRequired,
     onIgnore: PropTypes.func,
