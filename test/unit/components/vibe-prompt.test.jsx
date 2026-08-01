@@ -15,6 +15,13 @@ const baseProps = {
     onResizeStart: jest.fn()
 };
 
+test('the memory slider is not shown in the instruction view (hasKey)', () => {
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey />
+    );
+    expect(wrapper.find('.vibe-memory-slider')).toHaveLength(0);
+});
+
 test('the memory slider in the settings view reports changes via onContextTurnsChange', () => {
     const onContextTurnsChange = jest.fn();
     const wrapper = mountWithIntl(

@@ -216,10 +216,14 @@ const VibePromptComponent = props => {
                 </div>
             )}
             <div className={styles.memoryRow}>
-                <label className={styles.memoryLabel}>
+                <label
+                    className={styles.memoryLabel}
+                    htmlFor="vibe-memory-slider-input"
+                >
                     {intl.formatMessage(memoryMessages.memoryLabel)}
                 </label>
                 <MemorySlider
+                    id="vibe-memory-slider-input"
                     value={contextTurns}
                     ariaLabel={intl.formatMessage(memoryMessages.memoryLabel)}
                     className={styles.memorySlider}

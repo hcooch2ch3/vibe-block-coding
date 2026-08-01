@@ -19,6 +19,7 @@ class MemorySlider extends React.Component {
         return (
             <input
                 className={classNames('vibe-memory-slider', this.props.className)}
+                id={this.props.id}
                 type="range"
                 min={0}
                 max={10}
@@ -32,8 +33,9 @@ class MemorySlider extends React.Component {
 }
 
 MemorySlider.propTypes = {
-    ariaLabel: PropTypes.string,
+    ariaLabel: PropTypes.string.isRequired,
     className: PropTypes.string,
+    id: PropTypes.string,
     onChange: PropTypes.func.isRequired,
     value: PropTypes.number.isRequired
 };
