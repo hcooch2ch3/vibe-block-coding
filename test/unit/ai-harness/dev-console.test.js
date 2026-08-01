@@ -1,8 +1,9 @@
 // The generate/edit helpers behind window.vibe — the reusable core the live
 // smoke test and (week 2) the UI both call. Driven against a real headless
 // scratch-vm; only fetch is mocked.
-import {generate, edit, measureBuildRate} from '../../../src/lib/ai-harness/dev-console';
-import {decompile} from '../../../src/lib/ai-harness/dsl';
+import {generate, edit, measureBuildRate, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
+import {compile, decompile} from '../../../src/lib/ai-harness/dsl';
+import {hashProgram} from '../../../src/lib/ai-harness/base-hash';
 import {makeHeadlessVM} from './headless-target';
 
 // fakeVm: a minimal vm stub for measureBuildRate (vm is unused-but-kept for
@@ -99,5 +100,70 @@ describe('measureBuildRate', () => {
         expect(out.produced).toBe(1);
         expect(out.rate).toBeCloseTo(0.5);
         warnSpy.mockRestore();
+    });
+});
+
+// Helper: build a fetch stub returning an envelope with the given answer+blocks.
+const blocksFetch = (answer, blocks) => jest.fn(() => envelope(answer, blocks));
+
+describe('propose', () => {
+    test('propose holds blocks — no injection, workspace untouched', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
+        const {answer, proposal} = await propose(
+            vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
+            blocksFetch('ok', [{hat: 'when_clicked', body: [['move', 10]]}]));
+        expect(answer).toBe('ok');
+        expect(proposal.kind).toBe('generate');
+        expect(proposal.baseStamp).toEqual({targetId: target.id, baseHash: hashProgram([])});
+        expect(shareSpy).not.toHaveBeenCalled();
+        expect(decompile(target.blocks)).toEqual([]);
+    });
+
+    test('propose returns answer-only when the model returns no blocks', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const out = await propose(
+            vm, {apiKey: 'k', instruction: 'what is a sprite?', targetId: target.id},
+            jest.fn(() => envelope('A sprite is a character!', [])));
+        expect(out.answer).toBe('A sprite is a character!');
+        expect(out.proposal).toBeUndefined();
+    });
+});
+
+describe('applyProposal', () => {
+    test('applyProposal injects a fresh generate proposal', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const proposal = {kind: 'generate', blocks: [{hat: 'when_clicked', body: [['move', 10]]}],
+            baseStamp: {targetId: target.id, baseHash: hashProgram([])}};
+        const out = await applyProposal(vm, proposal);
+        expect(out).toEqual({ok: true});
+        expect(decompile(target.blocks)).toEqual([{hat: 'when_clicked', body: [['move', 10]]}]);
+    });
+
+    // critic #1 — the core stale-guard integration test (generate)
+    test('applyProposal fails closed on a stale workspace — no injection', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const {proposal} = await propose(
+            vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
+            blocksFetch('ok', [{hat: 'when_clicked', body: [['move', 10]]}]));
+        // child hand-edits AFTER proposing → base no longer matches
+        await vm.shareBlocksToTarget(compile([{hat: 'when_flag', body: [['move', 5]]}]), target.id);
+        const before = decompile(target.blocks);
+        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
+        const out = await applyProposal(vm, proposal);
+        expect(out).toEqual({ok: false, stale: true});
+        expect(shareSpy).not.toHaveBeenCalled();          // neither shareBlocksToTarget...
+        expect(decompile(target.blocks)).toEqual(before); // ...nor applyEdit ran
+    });
+
+    // stale EDIT proposal (constructed) — hash mismatch → no injection
+    test('applyProposal fails closed on a stale edit proposal', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
+        const proposal = {kind: 'edit', oldScripts: [], newScripts: [{hat: 'when_flag', body: [['move', 10]]}],
+            baseStamp: {targetId: target.id, baseHash: 'STALE'}}; // live empty → '[]' !== 'STALE'
+        const out = await applyProposal(vm, proposal);
+        expect(out).toEqual({ok: false, stale: true});
+        expect(shareSpy).not.toHaveBeenCalled();
     });
 });

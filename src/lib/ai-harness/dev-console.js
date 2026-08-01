@@ -11,6 +11,7 @@
 import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
 import {compile, decompile} from './dsl';
 import {applyEdit} from './edit';
+import {hashProgram, targetMatchesBase} from './base-hash';
 
 /**
  * 자연어 지시로 블록을 새로 만들어 현재 편집 대상에 심고, 결과 DSL 을 돌려준다.
@@ -78,6 +79,66 @@ export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fe
         }
     }
     return {total: prompts.length, produced, rate: prompts.length ? produced / prompts.length : 0};
+};
+
+/**
+ * Compile the current target's program and ask the LLM to respond — but do NOT
+ * mutate the workspace. Returns {answer} on a text-only reply, or
+ * {answer, proposal} when the model returns blocks. The proposal carries a
+ * baseStamp so applyProposal can detect stale edits before injecting.
+ *
+ * generate vs edit is chosen by whether the target is currently empty:
+ *   - empty  → kind:'generate', blocks from LLM
+ *   - non-empty → kind:'edit', oldScripts/newScripts from LLM
+ *
+ * @param {VirtualMachine} vm
+ * @param {object} opts - {apiKey, instruction, model?, targetId, history?}
+ * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
+ * @returns {Promise<{answer?: string, proposal?: object}>}
+ */
+export const propose = async function (vm, opts, fetchImpl) {
+    const target = vm.runtime.getTargetById(opts.targetId);
+    if (!target) throw new Error('propose: pinned target no longer exists');
+    const current = decompile(target.blocks); // propose NEVER mutates / stops threads
+    const isEmpty = current.length === 0;
+    const {answer, blocks} = await requestTurn({
+        apiKey: opts.apiKey, model: opts.model, instruction: opts.instruction,
+        currentScripts: isEmpty ? undefined : current, history: opts.history
+    }, fetchImpl);
+    if (!blocks) return {answer};
+    const baseStamp = {targetId: opts.targetId, baseHash: hashProgram(current)};
+    const proposal = isEmpty ?
+        {kind: 'generate', blocks, baseStamp} :
+        {kind: 'edit', oldScripts: current, newScripts: blocks, baseStamp};
+    return {answer, proposal};
+};
+
+/**
+ * Apply a proposal returned by propose(). Re-checks the target's current program
+ * against the baseStamp captured at propose time. If the workspace was edited in
+ * the meantime (stale), returns {ok:false, stale:true} with no side-effects.
+ *
+ * Only after the stale guard passes does it stop running threads (misc(a): stop
+ * threads at Apply, not at propose, so we don't interrupt a running project just
+ * because the user clicked Preview).
+ *
+ * @param {VirtualMachine} vm
+ * @param {object} proposal - {kind, blocks|oldScripts+newScripts, baseStamp}
+ * @returns {Promise<{ok:boolean, stale?:boolean}>}
+ */
+export const applyProposal = async function (vm, proposal) {
+    const {targetId, baseHash} = proposal.baseStamp;
+    if (!targetMatchesBase(vm, targetId, baseHash)) return {ok: false, stale: true};
+    // misc(a): stop threads ONLY here, at Apply — propose must not touch the running
+    // project. applyEdit's deleteBlock can orphan a running script otherwise.
+    vm.stopAll();
+    if (proposal.kind === 'generate') {
+        await vm.shareBlocksToTarget(compile(proposal.blocks), targetId);
+        vm.refreshWorkspace();
+    } else {
+        await applyEdit(vm, proposal.oldScripts, proposal.newScripts, targetId);
+    }
+    return {ok: true};
 };
 
 /**
