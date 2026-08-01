@@ -37,7 +37,9 @@ const stripVolatile = function (turn) {
 export const loadChat = function (storage = defaultStorage()) {
     if (!storage) return [];
     try {
-        const parsed = JSON.parse(storage.getItem(STORAGE_KEY));
+        const raw = storage.getItem(STORAGE_KEY);
+        if (typeof raw !== 'string') return [];
+        const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed.filter(isValidTurn) : [];
     } catch (e) {
         return [];
@@ -51,6 +53,7 @@ export const loadChat = function (storage = defaultStorage()) {
  * @returns {boolean} true if persisted; false if storage rejected the write
  */
 export const saveChat = function (turns, storage = defaultStorage()) {
+    if (!Array.isArray(turns)) return false;
     if (!storage) return false;
     try {
         storage.setItem(STORAGE_KEY, JSON.stringify(turns.slice(-MAX_TURNS).map(stripVolatile)));
