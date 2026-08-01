@@ -4,7 +4,9 @@ import {
     buildUserPrompt,
     parseDSL,
     parseEnvelope,
-    requestScripts
+    requestScripts,
+    requestTurn,
+    ENVELOPE_MAX_TOKENS
 } from '../../../src/lib/ai-harness/llm';
 
 const flag = body => ({hat: 'when_flag', body});
@@ -219,5 +221,27 @@ describe('parseEnvelope', () => {
         const out = parseEnvelope('{"answer":"real","blocks":[{"hat":"when_flag","body":[]}');
         expect(out.answer).toBe('real');
         expect(out.blocks).toBeUndefined();
+    });
+});
+
+describe('requestTurn (fetch injected)', () => {
+    test('buildUserPrompt inlines recent history text, not block payloads', () => {
+        const p = buildUserPrompt({instruction: 'make it jump', history: [
+            {role: 'user', text: 'walk'}, {role: 'ai', text: 'Added a move block'}
+        ]});
+        expect(p).toContain('walk');
+        expect(p).toContain('Added a move block');
+        expect(p).toContain('make it jump');
+    });
+    test('requestTurn returns the envelope and uses the raised token cap', async () => {
+        const fetchImpl = jest.fn(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({content: [{text: '{"answer":"hi","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}'}]})
+        }));
+        const out = await requestTurn({apiKey: 'k', instruction: 'walk'}, fetchImpl);
+        expect(out.answer).toBe('hi');
+        expect(out.blocks).toHaveLength(1);
+        const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+        expect(body.max_tokens).toBe(ENVELOPE_MAX_TOKENS);
     });
 });

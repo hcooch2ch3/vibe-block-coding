@@ -47,13 +47,26 @@ export const buildSystemPrompt = function () {
 
 /**
  * 사용자 프롬프트 조립. currentScripts 가 있으면 편집(현재 프로그램 동봉), 없으면 생성.
- * @param {object} opts - {instruction, currentScripts?}
+ * Optional history is prepended as recent conversation context (text only, no block payloads).
+ * @param {object} opts - {instruction, currentScripts?, history?}
+ * @param {Array<{role:'user'|'ai', text: string}>} [opts.history] - recent turns, oldest first
  * @returns {string} 사용자 메시지 본문
  */
 export const buildUserPrompt = function (opts) {
-    const {instruction, currentScripts} = opts;
+    const {instruction, currentScripts, history} = opts;
+
+    // Prepend recent conversation history as inline context (text only, no DSL payloads).
+    const historyLines = (history && history.length)
+        ? [
+            'Recent conversation:',
+            ...history.map(turn => `${turn.role === 'ai' ? 'AI' : 'User'}: ${turn.text}`),
+            ''
+        ]
+        : [];
+
     if (currentScripts && currentScripts.length) {
         return [
+            ...historyLines,
             'Current program (JSON DSL):',
             JSON.stringify(currentScripts),
             '',
@@ -61,7 +74,7 @@ export const buildUserPrompt = function (opts) {
             'Return the FULL updated program; keep unchanged scripts identical.'
         ].join('\n');
     }
-    return `Create a program so that: ${instruction}`;
+    return [...historyLines, `Create a program so that: ${instruction}`].join('\n');
 };
 
 // 코드펜스/산문에 섞인 응답에서 첫 JSON 값(배열 또는 객체) 문자열만 잘라낸다.
@@ -217,6 +230,63 @@ export const parseEnvelope = function (text) {
         } catch (e) { /* fail-closed: keep answer, drop blocks */ }
     }
     return out;
+};
+
+export const ENVELOPE_MAX_TOKENS = 2048;
+
+// Envelope-mode system prompt: same DSL vocabulary as buildSystemPrompt, but the
+// model returns {answer, blocks} instead of a bare array. Kept SEPARATE so the
+// legacy requestScripts/parseDSL path (Task 0 measure, window.vibe.smoke) still
+// gets an array and does not break.
+export const buildEnvelopeSystemPrompt = function () {
+    const vocab = buildSystemPrompt().split('\n')
+        .filter(l => !l.startsWith('Reply with ONLY') && !l.startsWith('{"hat"') && !l.startsWith('Use only the steps'));
+    return [
+        ...vocab,
+        '',
+        'If the child is ASKING a question, reply {"answer": "<short friendly reply>"} with no blocks.',
+        'If the child wants to MAKE or CHANGE something, reply',
+        '{"answer": "<one short line explaining what you did>", "blocks": [<scripts>]}.',
+        'Each script in "blocks" is {"hat": "<hat step>", "body": [["step", ...args], ...]}.',
+        'ALWAYS include blocks when they want to build. No prose outside the JSON, no code fences.'
+    ].join('\n');
+};
+
+/**
+ * Envelope-mode turn: calls the Anthropic Messages API and returns a parsed
+ * {answer?, blocks?} envelope. Uses buildEnvelopeSystemPrompt so the model
+ * emits structured JSON rather than a bare DSL array. Supports optional history
+ * context passed through to buildUserPrompt.
+ * @param {object} config - {apiKey, model?, instruction, currentScripts?, history?}
+ * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
+ * @returns {Promise<{answer?: string, blocks?: Array<object>}>}
+ */
+export const requestTurn = async function (config, fetchImpl) {
+    const {apiKey, model, instruction, currentScripts, history} = config;
+    const doFetch = fetchImpl || fetch;
+    const res = await doFetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: model || DEFAULT_MODEL,
+            max_tokens: ENVELOPE_MAX_TOKENS,
+            system: buildEnvelopeSystemPrompt(),
+            messages: [{role: 'user', content: buildUserPrompt({instruction, currentScripts, history})}]
+        })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = (err.error && err.error.message) || `HTTP ${res.status}`;
+        throw new Error(`LLM 호출 실패: ${msg}`);
+    }
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').join('');
+    return parseEnvelope(text);
 };
 
 /**
