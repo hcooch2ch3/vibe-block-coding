@@ -1,23 +1,39 @@
-/* Surface B canvas glow — a short Scratch-blue pulse on a changed block stack.
- * The class is added to a block's SVG group by glow.js; css-loader hashes the
- * local name, and the container passes the hashed name back into glowChangedBlocks.
- * Scratch blue = #4C97FF (rgb 76,151,255) — the editor's signature accent, and
- * distinct from the yellow "running" glow so "changed" never reads as "running". */
+/* Surface B canvas glow — a changed block stack "pops" (a quick scale) and pulses
+ * in Scratch blue. The class is added to a block's SVG group by glow.js; css-loader
+ * hashes the local name, and the container passes the hashed name back into
+ * glowChangedBlocks. Scratch blue = #4C97FF (rgb 76,151,255) — the editor's
+ * signature accent, distinct from the yellow "running" glow.
+ *
+ * IMPORTANT: the pop uses the individual `scale:` property, NOT `transform: scale()`.
+ * Blockly positions each block via an SVG `transform="translate(x,y)"` attribute
+ * (which maps to the `transform` CSS property). `transform: scale()` would REPLACE
+ * that translate and fling the block to the SVG origin. The individual `scale:`
+ * property composes WITH the translate instead, and `transform-box: fill-box` +
+ * `transform-origin: center` scale the block about its own centre, in place. */
 
 .pulse {
-    animation: vibeGlowPulse 1.2s ease-in-out;
-    /* drop-shadow follows the block outline, so the halo hugs the stack shape */
-    will-change: filter;
+    animation: vibeGlowPop 1.2s ease-out;
+    transform-box: fill-box;      /* origin box = the block's own bounds, not the SVG root */
+    transform-origin: center;     /* so `scale:` grows from the block centre, in place */
+    will-change: filter, scale;
 }
 
-@keyframes vibeGlowPulse {
-    0%, 100% { filter: drop-shadow(0 0 0 rgba(76, 151, 255, 0)); }
-    30%, 70% { filter: drop-shadow(0 0 8px rgba(76, 151, 255, 0.95)); }
-    50%      { filter: drop-shadow(0 0 3px rgba(76, 151, 255, 0.5)); }
+@keyframes vibeGlowPop {
+    /* 0-12%: the "pop" — a quick scale-up + bright flash */
+    0%   { scale: 1;    filter: drop-shadow(0 0 0 rgba(76, 151, 255, 0)); }
+    12%  { scale: 1.06; filter: drop-shadow(0 0 9px rgba(76, 151, 255, 0.95)); }
+    /* settle back to size, then two softer glow breaths */
+    30%  { scale: 1;    filter: drop-shadow(0 0 6px rgba(76, 151, 255, 0.8)); }
+    55%  { scale: 1;    filter: drop-shadow(0 0 2px rgba(76, 151, 255, 0.35)); }
+    75%  { scale: 1;    filter: drop-shadow(0 0 7px rgba(76, 151, 255, 0.9)); }
+    100% { scale: 1;    filter: drop-shadow(0 0 0 rgba(76, 151, 255, 0)); }
 }
 
 /* Defense in depth: glow.js already skips the class under reduced-motion, but if
  * the class is ever applied some other way, honor the OS preference here too. */
 @media (prefers-reduced-motion: reduce) {
-    .pulse { animation: none; }
+    .pulse {
+        animation: none;
+        scale: 1;
+    }
 }
