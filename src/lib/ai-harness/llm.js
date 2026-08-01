@@ -151,10 +151,62 @@ export const parseEnvelope = function (text) {
         // but a complete leading "answer" field usually survives. Salvage it and
         // drop blocks. If not even an answer is present, rethrow so the caller
         // shows the retry nudge.
-        const m = text.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-        if (m) {
-            try { return {answer: JSON.parse(`"${m[1]}"`)}; } catch (e2) { /* fall through */ }
-        }
+        // Safety: only accept an "answer" that sits at depth 1 of the outer object
+        // (a direct child key). A bare regex can fire on "answer" nested inside
+        // blocks; instead we scan character-by-character, tracking JSON string and
+        // brace/bracket depth, and only attempt salvage when depth === 1.
+        const salvaged = (function scanForTopLevelAnswer () {
+            const src = text;
+            // Find the outer object's opening '{'.
+            const outerStart = src.search(/\{/);
+            if (outerStart === -1) return null;
+            let depth = 0;
+            let inString = false;
+            let escaped = false;
+            let stringStart = -1; // index of the opening '"' of the current string
+            // Matches a candidate "answer":"..." starting right at the opening '"'
+            // of the key name. Reuses the same value-capture group as before.
+            const answerKeyRe = /^"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+            for (let i = outerStart; i < src.length; i++) {
+                const ch = src[i];
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch === '\\') {
+                        escaped = true;
+                    } else if (ch === '"') {
+                        // Unescaped closing quote — string ended. If we were at depth 1,
+                        // test from the string's opening '"' for a top-level "answer" key.
+                        if (depth === 1) {
+                            const tail = src.slice(stringStart);
+                            const m = tail.match(answerKeyRe);
+                            if (m) {
+                                // Found top-level "answer" — try to decode the value.
+                                try {
+                                    return JSON.parse(`"${m[1]}"`);
+                                } catch (e2) {
+                                    return null; // mis-decode → fall through → rethrow
+                                }
+                            }
+                        }
+                        inString = false;
+                        stringStart = -1;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inString = true;
+                        escaped = false;
+                        stringStart = i;
+                    } else if (ch === '{' || ch === '[') {
+                        depth++;
+                    } else if (ch === '}' || ch === ']') {
+                        depth--;
+                    }
+                }
+            }
+            return null;
+        }());
+        if (salvaged !== null) return {answer: salvaged};
         throw e;
     }
     const out = {};

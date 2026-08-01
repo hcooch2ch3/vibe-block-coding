@@ -189,4 +189,35 @@ describe('parseEnvelope', () => {
         expect(out.answer).toBe('Here you go!');
         expect(out.blocks).toBeUndefined();
     });
+
+    // Over-match guard: salvage must NOT fire on an "answer" nested inside blocks.
+    // Before the fix, the regex lifts the nested "answer" and returns it silently.
+    test('parseEnvelope: does not salvage an "answer" nested inside blocks (over-match guard)', () => {
+        const text = '{"blocks":[{"hat":"when_clicked","answer":"not a real answer"}';
+        expect(() => parseEnvelope(text)).toThrow();
+    });
+
+    test('parseEnvelope: empty/whitespace answer with valid blocks keeps blocks, drops answer', () => {
+        const out = parseEnvelope('{"answer":"   ","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
+        expect(out.answer).toBeUndefined();
+        expect(out.blocks).toHaveLength(1);
+    });
+
+    test('parseEnvelope: non-string answer is ignored, blocks still parsed', () => {
+        const out = parseEnvelope('{"answer":123,"blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
+        expect(out.answer).toBeUndefined();
+        expect(out.blocks).toHaveLength(1);
+    });
+
+    // Item 4 — PIN test: sliceJSON uses lastIndexOf('}'), which on a truncated reply
+    // ending at a nested '}' produces an unbalanced slice that JSON.parse rejects.
+    // Therefore the success path cannot be taken with wrong data; salvage runs instead.
+    // This test pins that nested-'}' truncation stays on the salvage path (not success).
+    test('parseEnvelope: truncated at nested "}" salvages top-level answer (sliceJSON nested-} pin)', () => {
+        // Last '}' is the nested script's close, not the outer close — slice is unbalanced.
+        // JSON.parse throws, salvage fires on the top-level "answer".
+        const out = parseEnvelope('{"answer":"real","blocks":[{"hat":"when_flag","body":[]}');
+        expect(out.answer).toBe('real');
+        expect(out.blocks).toBeUndefined();
+    });
 });
