@@ -29,14 +29,13 @@ test('terminal proposal with no preview does not crash', () => {
     )).not.toThrow();
 });
 
-test('edit-kind proposal turn passes newScripts as scripts to ProposalCard', () => {
-    const newScripts = [{hat: 'when_flag', body: [['move', 5]]}];
+test('edit-kind proposal previews a changed script as updated, not the whole program', () => {
     const turn = {
         id: 7, role: 'ai', kind: 'proposal', status: 'pending', text: 'Moved sprite',
         preview: {
             kind: 'edit',
             oldScripts: [{hat: 'when_flag', body: [['wait', 1]]}],
-            newScripts: newScripts,
+            newScripts: [{hat: 'when_flag', body: [['move', 5]]}],
             baseStamp: {targetId: 't1', baseHash: 'H2'}
         }
     };
@@ -45,7 +44,32 @@ test('edit-kind proposal turn passes newScripts as scripts to ProposalCard', () 
     );
     const card = w.find(ProposalCard);
     expect(card).toHaveLength(1);
-    expect(card.prop('scripts')).toEqual(newScripts);
+    // the one script changed in place → previewed as 'updated'
+    expect(card.prop('previews')).toEqual([
+        {script: {hat: 'when_flag', body: [['move', 5]]}, variant: 'updated'}
+    ]);
+});
+
+test('edit-kind proposal previews ONLY the added script, not the kept one (regression)', () => {
+    // Repro of the reported bug: "say hello" was already applied, then "walk around"
+    // is proposed. edit sends the current program and gets it back WITH the unchanged
+    // say-hello script still in newScripts. The card must preview only the new stack.
+    const sayHello = {hat: 'when_this_sprite_clicked', body: [['say', 'hello']]};
+    const walk = {hat: 'when_flag', body: [['forever', [['move', 10], ['turn_right', 15]]]]};
+    const turn = {
+        id: 8, role: 'ai', kind: 'proposal', status: 'pending', text: 'Now it walks',
+        preview: {
+            kind: 'edit',
+            oldScripts: [sayHello],
+            newScripts: [sayHello, walk],
+            baseStamp: {targetId: 't1', baseHash: 'H3'}
+        }
+    };
+    const w = shallowWithIntl(
+        <HistoryRow turn={turn} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} onMakeIt={jest.fn()} />
+    );
+    const previews = w.find(ProposalCard).prop('previews');
+    expect(previews).toEqual([{script: walk, variant: 'added'}]);
 });
 
 test('proposal turn renders a ProposalCard fed from the preview adapter', () => {
@@ -59,7 +83,9 @@ test('proposal turn renders a ProposalCard fed from the preview adapter', () => 
     const card = w.find(ProposalCard);
     expect(card).toHaveLength(1);
     expect(card.prop('status')).toBe('pending');
-    expect(card.prop('scripts')).toEqual([{hat: 'when_clicked', body: [['move', 10]]}]);
+    expect(card.prop('previews')).toEqual([
+        {script: {hat: 'when_clicked', body: [['move', 10]]}, variant: 'added'}
+    ]);
     expect(card.prop('explanation')).toBe('Added a move');
     // the row's bound handler forwards the turn
     card.prop('onApply')();

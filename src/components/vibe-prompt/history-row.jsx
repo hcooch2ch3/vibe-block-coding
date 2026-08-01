@@ -4,11 +4,27 @@ import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import classNames from 'classnames';
 import ProposalCard from './proposal-card.jsx';
+import {diff} from '../../lib/ai-harness/edit';
 import styles from './vibe-prompt.css';
 
 const messages = defineMessages({
     makeIt: {id: 'vibe.prompt.makeIt', defaultMessage: '🧩 Make it', description: 'Turn an answer into a build'}
 });
+
+// Turn a proposal's preview into the list of {script, variant} the card renders.
+// generate → every block is newly added. edit → only the scripts the diff marks
+// add (new stack, 'added') or replace (existing stack changed, 'updated'); kept
+// scripts are omitted so the card shows just what this turn does. Missing preview
+// (terminal turns strip it) → [].
+const buildPreviews = function (preview) {
+    if (!preview) return [];
+    if (preview.kind === 'generate') {
+        return preview.blocks.map(script => ({script, variant: 'added'}));
+    }
+    return diff(preview.oldScripts, preview.newScripts)
+        .filter(op => op.type === 'add' || op.type === 'replace')
+        .map(op => ({script: op.script, variant: op.type === 'add' ? 'added' : 'updated'}));
+};
 
 // Renders one chat turn by shape. Class (not functional) so the Make-it/Apply/Ignore/
 // Rebuild handlers are bound methods closing over `turn` — no inline JSX arrows (jsx-no-bind).
@@ -53,13 +69,17 @@ class HistoryRow extends React.Component {
             );
         }
         if (turn.kind !== 'proposal') return null;
-        // kind === 'proposal'
-        const preview = turn.preview;
-        const scripts = preview ? (preview.kind === 'generate' ? preview.blocks : preview.newScripts) : [];
+        // kind === 'proposal'. Preview only the scripts this proposal actually
+        // CHANGES — not the whole post-edit program. An 'edit' turn sends the
+        // current program to the model and gets the full modified program back,
+        // so newScripts still contains the unchanged (kept) scripts; showing them
+        // would falsely re-present already-applied blocks as "added". Run the same
+        // diff apply uses and keep only add/replace, tagging each with its variant.
+        const previews = buildPreviews(turn.preview);
         return (
             <ProposalCard
                 status={turn.status}
-                scripts={scripts}
+                previews={previews}
                 explanation={turn.text}
                 vm={vm}
                 onApply={this.handleApply}
