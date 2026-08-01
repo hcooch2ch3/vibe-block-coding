@@ -52,9 +52,10 @@ class HistoryRow extends React.Component {
                 </div>
             );
         }
+        if (turn.kind !== 'proposal') return null;
         // kind === 'proposal'
         const preview = turn.preview;
-        const scripts = preview.kind === 'generate' ? preview.blocks : preview.newScripts;
+        const scripts = preview ? (preview.kind === 'generate' ? preview.blocks : preview.newScripts) : [];
         return (
             <ProposalCard
                 status={turn.status}

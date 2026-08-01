@@ -22,6 +22,32 @@ test('user turn renders a plain bubble, no card', () => {
     expect(w.find('.vibe-bubble--user')).toHaveLength(1);
 });
 
+test('terminal proposal with no preview does not crash', () => {
+    const turn = {id: 6, role: 'ai', kind: 'proposal', status: 'applied', text: 'Moved'};
+    expect(() => shallowWithIntl(
+        <HistoryRow turn={turn} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} onMakeIt={jest.fn()} />
+    )).not.toThrow();
+});
+
+test('edit-kind proposal turn passes newScripts as scripts to ProposalCard', () => {
+    const newScripts = [{hat: 'when_flag', body: [['move', 5]]}];
+    const turn = {
+        id: 7, role: 'ai', kind: 'proposal', status: 'pending', text: 'Moved sprite',
+        preview: {
+            kind: 'edit',
+            oldScripts: [{hat: 'when_flag', body: [['wait', 1]]}],
+            newScripts: newScripts,
+            baseStamp: {targetId: 't1', baseHash: 'H2'}
+        }
+    };
+    const w = shallowWithIntl(
+        <HistoryRow turn={turn} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} onMakeIt={jest.fn()} />
+    );
+    const card = w.find(ProposalCard);
+    expect(card).toHaveLength(1);
+    expect(card.prop('scripts')).toEqual(newScripts);
+});
+
 test('proposal turn renders a ProposalCard fed from the preview adapter', () => {
     const turn = {id: 5, role: 'ai', kind: 'proposal', text: 'Added a move', status: 'pending',
         instruction: 'walk', targetId: 't1',

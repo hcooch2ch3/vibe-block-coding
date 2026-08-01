@@ -86,7 +86,8 @@ HistoryList.defaultProps = {
     onClearHistory: noop,
     onIgnore: noop,
     onMakeIt: noop,
-    onRebuild: noop
+    onRebuild: noop,
+    turns: []
 };
 
 export {HistoryList};

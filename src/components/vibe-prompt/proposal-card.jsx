@@ -74,7 +74,7 @@ const ProposalCard = function ({status, scripts, explanation, onApply, onIgnore,
             {explanation ? (
                 <div className={classNames('proposal-card__explanation', styles.explanation)}>{explanation}</div>
             ) : null}
-            {scripts.map((s, i) => (
+            {(status === 'pending' || status === 'stale') && scripts.map((s, i) => (
                 <BlockPreview
                     key={i}
                     script={s}

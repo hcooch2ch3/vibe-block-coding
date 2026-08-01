@@ -39,6 +39,14 @@ test('applied: shows the applied label, no action buttons', () => {
     expect(w.find('.proposal-card__rebuild')).toHaveLength(0);
 });
 
+test('applied status renders no BlockPreview', () => {
+    const w = shallowWithIntl(
+        <ProposalCard status="applied" scripts={scripts} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    expect(w.find('BlockPreview')).toHaveLength(0);
+    expect(w.find('.proposal-card__applied')).toHaveLength(1);
+});
+
 test('ignored: shows ignored label, no apply or rebuild', () => {
     const w = shallowWithIntl(
         <ProposalCard status="ignored" scripts={scripts} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
