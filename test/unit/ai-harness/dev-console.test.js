@@ -166,4 +166,50 @@ describe('applyProposal', () => {
         expect(out).toEqual({ok: false, stale: true});
         expect(shareSpy).not.toHaveBeenCalled();
     });
+
+    // A3a — real propose→edit→apply round-trip: edit proposal applies and workspace reflects edit
+    test('applyProposal edit happy path — real propose→edit→apply round-trip', async () => {
+        const {vm, target} = makeHeadlessVM();
+        // Seed the target with an initial generate so it is non-empty at propose time.
+        const seedFetch = fetchReturning([flag([['move', 10]])]);
+        await generate(vm, {apiKey: 'k', instruction: 'walk', targetId: target.id}, seedFetch);
+        // propose with the target non-empty → kind:'edit'
+        const editedScript = flag([['move', 10], ['say', 'hi']]);
+        const {proposal} = await propose(
+            vm,
+            {apiKey: 'k', instruction: 'also say hi', targetId: target.id},
+            blocksFetch('ok', [editedScript])
+        );
+        expect(proposal.kind).toBe('edit');
+        // apply the edit proposal
+        const out = await applyProposal(vm, proposal);
+        expect(out).toEqual({ok: true});
+        expect(asSet(decompile(target.blocks))).toEqual(asSet([editedScript]));
+    });
+
+    // A3b — real-flow edit stale: hand-edit after propose → applyProposal detects stale
+    test('applyProposal edit stale — workspace edited between propose and apply', async () => {
+        const {vm, target} = makeHeadlessVM();
+        // Seed so target is non-empty.
+        await generate(vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
+            fetchReturning([flag([['move', 10]])]));
+        // propose an edit
+        const {proposal} = await propose(
+            vm,
+            {apiKey: 'k', instruction: 'also say hi', targetId: target.id},
+            blocksFetch('ok', [flag([['move', 10], ['say', 'hi']])])
+        );
+        expect(proposal.kind).toBe('edit');
+        // hand-edit the workspace AFTER propose → hash diverges
+        await vm.shareBlocksToTarget(
+            compile([flag([['move', 99]])]),
+            target.id
+        );
+        const beforeApply = decompile(target.blocks);
+        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
+        const out = await applyProposal(vm, proposal);
+        expect(out).toEqual({ok: false, stale: true});
+        expect(shareSpy).not.toHaveBeenCalled();
+        expect(asSet(decompile(target.blocks))).toEqual(asSet(beforeApply));
+    });
 });

@@ -64,7 +64,7 @@ export const edit = async function (vm, opts, fetchImpl) {
  * @param {VirtualMachine} vm - vm instance (kept for signature stability; unused internally)
  * @param {object} opts - {apiKey, prompts, model?}
  * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
- * @returns {Promise<{total:number, produced:number, rate:number}>}
+ * @returns {Promise<object>} object with total, produced, and rate fields
  */
 export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fetchImpl) {
     if (!Array.isArray(prompts)) throw new TypeError('measureBuildRate: prompts must be an array');
@@ -91,20 +91,24 @@ export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fe
  *   - empty  → kind:'generate', blocks from LLM
  *   - non-empty → kind:'edit', oldScripts/newScripts from LLM
  *
- * @param {VirtualMachine} vm
+ * @param {VirtualMachine} vm - scratch-vm instance
  * @param {object} opts - {apiKey, instruction, model?, targetId, history?}
  * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
- * @returns {Promise<{answer?: string, proposal?: object}>}
+ * @returns {Promise<object>} object with optional answer string and optional proposal object
  */
 export const propose = async function (vm, opts, fetchImpl) {
     const target = vm.runtime.getTargetById(opts.targetId);
     if (!target) throw new Error('propose: pinned target no longer exists');
     const current = decompile(target.blocks); // propose NEVER mutates / stops threads
     const isEmpty = current.length === 0;
-    const {answer, blocks} = await requestTurn({
-        apiKey: opts.apiKey, model: opts.model, instruction: opts.instruction,
-        currentScripts: isEmpty ? undefined : current, history: opts.history
-    }, fetchImpl);
+    const cfg = {
+        apiKey: opts.apiKey,
+        model: opts.model,
+        instruction: opts.instruction,
+        history: opts.history
+    };
+    if (!isEmpty) cfg.currentScripts = current;
+    const {answer, blocks} = await requestTurn(cfg, fetchImpl);
     if (!blocks) return {answer};
     const baseStamp = {targetId: opts.targetId, baseHash: hashProgram(current)};
     const proposal = isEmpty ?
@@ -122,9 +126,14 @@ export const propose = async function (vm, opts, fetchImpl) {
  * threads at Apply, not at propose, so we don't interrupt a running project just
  * because the user clicked Preview).
  *
- * @param {VirtualMachine} vm
+ * NON-ATOMIC for kind:'edit': applyEdit deletes then re-injects blocks with no
+ * rollback. A rejection mid-apply may leave the workspace partially edited; the
+ * caller MUST treat a thrown error as "workspace possibly dirty → Rebuild", not
+ * a no-op.
+ *
+ * @param {VirtualMachine} vm - scratch-vm instance
  * @param {object} proposal - {kind, blocks|oldScripts+newScripts, baseStamp}
- * @returns {Promise<{ok:boolean, stale?:boolean}>}
+ * @returns {Promise<object>} object with ok boolean and optional stale boolean
  */
 export const applyProposal = async function (vm, proposal) {
     const {targetId, baseHash} = proposal.baseStamp;
@@ -135,8 +144,10 @@ export const applyProposal = async function (vm, proposal) {
     if (proposal.kind === 'generate') {
         await vm.shareBlocksToTarget(compile(proposal.blocks), targetId);
         vm.refreshWorkspace();
-    } else {
+    } else if (proposal.kind === 'edit') {
         await applyEdit(vm, proposal.oldScripts, proposal.newScripts, targetId);
+    } else {
+        throw new Error(`applyProposal: unknown proposal kind: ${proposal.kind}`);
     }
     return {ok: true};
 };
