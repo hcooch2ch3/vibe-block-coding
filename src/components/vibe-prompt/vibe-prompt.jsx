@@ -143,7 +143,7 @@ const VibePromptComponent = props => {
         onSubmitKey, onSubmitInstruction, onEditKey,
         onChipClick, onRetry,
         collapsed, position, onToggleCollapse, onDragStop,
-        history, vm, onClearHistory,
+        turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
         canCancelKey, onCancelKey, size, onResizeStart
     } = props;
 
@@ -202,9 +202,13 @@ const VibePromptComponent = props => {
     const instructionEntry = (
         <div className={styles.body}>
             <HistoryList
-                history={history}
+                turns={turns}
                 vm={vm}
                 onClearHistory={onClearHistory}
+                onApply={onApply}
+                onIgnore={onIgnore}
+                onRebuild={onRebuild}
+                onMakeIt={onMakeIt}
             />
             <form
                 className={styles.row}
@@ -353,7 +357,7 @@ VibePromptComponent.defaultProps = {
     collapsed: false,
     error: false,
     hasKey: false,
-    history: [],
+    turns: [],
     instructionDraft: '',
     keyDraft: '',
     position: {x: 0, y: 0},
@@ -366,17 +370,20 @@ VibePromptComponent.propTypes = {
     collapsed: PropTypes.bool,
     error: PropTypes.bool,
     hasKey: PropTypes.bool,
-    history: PropTypes.array,
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
+    onApply: PropTypes.func,
     onCancelKey: PropTypes.func,
     onChipClick: PropTypes.func.isRequired,
     onClearHistory: PropTypes.func,
     onDragStop: PropTypes.func.isRequired,
     onEditKey: PropTypes.func.isRequired,
+    onIgnore: PropTypes.func,
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
+    onMakeIt: PropTypes.func,
+    onRebuild: PropTypes.func,
     onResizeStart: PropTypes.func,
     onRetry: PropTypes.func.isRequired,
     onSubmitInstruction: PropTypes.func.isRequired,
@@ -384,6 +391,7 @@ VibePromptComponent.propTypes = {
     onToggleCollapse: PropTypes.func.isRequired,
     position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number}),
     size: PropTypes.shape({w: PropTypes.number, h: PropTypes.number}),
+    turns: PropTypes.array,
     vm: PropTypes.object
 };
 

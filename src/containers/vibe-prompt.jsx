@@ -5,15 +5,19 @@ import {connect} from 'react-redux';
 import VM from 'scratch-vm';
 
 import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
-import {generate, edit} from '../lib/ai-harness/dev-console';
-import {decompile} from '../lib/ai-harness/dsl';
-import {diff} from '../lib/ai-harness/edit';
+import {propose, applyProposal} from '../lib/ai-harness/dev-console';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
-import {loadHistory, saveHistory} from '../lib/ai-harness/history-store';
+import {loadChat, saveChat} from '../lib/ai-harness/chat-store';
 import {
     loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
-    HEADER_H, DEFAULT_CARD_H, DEFAULT_W, MIN_W, MIN_H, EDGE_MARGIN, MENU_BAR_TOP
+    HEADER_H, DEFAULT_CARD_H, DEFAULT_W, MIN_W, MIN_H, EDGE_MARGIN, MENU_BAR_TOP,
+    DEFAULT_CONTEXT_TURNS
 } from '../lib/ai-harness/ui-prefs';
+
+// Task 0 gate: route the model's envelope through the answer/proposal split
+// (a text reply stays an answer; blocks become a pending proposal). Defaults true
+// until a human measures the build rate; when false, every submit is a build.
+const AUTO_CLASSIFY = true;
 
 class VibePrompt extends React.Component {
     constructor (props) {
@@ -25,6 +29,11 @@ class VibePrompt extends React.Component {
             'handleSubmitInstruction',
             'handleChipClick',
             'handleRetry',
+            'handleApply',
+            'handleIgnore',
+            'handleRebuild',
+            'handleMakeIt',
+            'handleContextTurnsChange',
             'handleToggleCollapse',
             'handleDragStop',
             'handleResize',
@@ -35,11 +44,15 @@ class VibePrompt extends React.Component {
             'handleResizeMove',
             'handleResizeStop'
         ]);
-        const history = loadHistory();
+        const turns = loadChat();
         // seed the id counter from the max EXISTING numeric id (a corrupt/legacy
         // non-numeric id would otherwise make Math.max NaN → duplicate React keys).
-        const ids = history.map(e => e.id).filter(Number.isFinite);
-        this.nextHistoryId = ids.length ? Math.max(...ids) + 1 : 0;
+        const ids = turns.map(t => t.id).filter(Number.isFinite);
+        this.nextId = ids.length ? Math.max(...ids) + 1 : 0;
+        // Single-flight Apply guard: an INSTANCE field (not state) so two Apply
+        // clicks in the same tick are rejected synchronously, before the awaited
+        // applyProposal can double-inject.
+        this.applying = false;
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
         const prefs = loadPrefs();
         const collapsed = prefs ? prefs.collapsed : false;
@@ -66,10 +79,11 @@ class VibePrompt extends React.Component {
             error: false,
             editingKey: false,
             lastInstruction: null,
+            contextTurns: prefs ? prefs.contextTurns : DEFAULT_CONTEXT_TURNS,
             collapsed,
             position,
             size,
-            history
+            turns
         };
     }
     componentDidMount () {
@@ -222,78 +236,140 @@ class VibePrompt extends React.Component {
         const {position, collapsed, size} = this.state;
         savePrefs({...position, collapsed, w: size.w, h: size.h});
     }
-    runInstruction (instruction, targetId) {
-        // Enforce the busy invariant in the primitive itself, not only in the
-        // callers — so a future caller can't re-introduce a double-submit /
-        // stop-threads-mid-request (dual-review Task 3, defense-in-depth).
-        if (this.state.busy) return Promise.resolve();
+    buildHistoryWindow () {
+        // Last `contextTurns` round-trips of {role, text} ONLY — never the preview
+        // block payload or baseStamp (they'd bloat the prompt and leak internals).
+        // length <= contextTurns*2 (a round-trip is a user turn + an ai turn).
+        const n = this.state.contextTurns;
+        return this.state.turns.slice(-n * 2).map(t => ({role: t.role, text: t.text}));
+    }
+    // Immutably flip one turn's status by id, then persist. Used by apply / ignore.
+    setTurnStatus (id, status) {
+        this.setState(prev => {
+            const turns = prev.turns.map(t => (t.id === id ? Object.assign({}, t, {status}) : t));
+            saveChat(turns);
+            return {turns};
+        });
+    }
+    // Re-run propose against the CURRENT workspace for the given pinned target and
+    // append a NEW turn (pending proposal or answer). Shared by submit's success
+    // tail, retry, rebuild and make-it. Does NOT push a user turn or read the draft.
+    runProposeFor (instruction, targetId) {
+        if (this.state.busy || !this.state.apiKey) return Promise.resolve();
         const vm = this.props.vm;
-        const apiKey = this.state.apiKey;
-        // Stop threads so applyEdit's deleteBlock can't orphan a running script.
-        vm.stopAll();
-        this.setState({busy: true, error: false});
-        // Detection (decompile) can throw on non-OPMAP blocks — keep it inside
-        // the chain so any throw lands in .catch and shows the friendly error.
-        let before = [];
+        this.setState({busy: true, error: false, lastInstruction: {instruction, targetId}});
+        const history = this.buildHistoryWindow();
         return Promise.resolve()
-            .then(() => {
-                // fail-closed: never fall back to editingTarget if the pinned
-                // sprite was deleted mid-request (would edit the wrong sprite).
-                const target = vm.runtime.getTargetById(targetId);
-                if (!target) throw new Error('vibe: pinned sprite no longer exists');
-                before = decompile(target.blocks);
-                const isEmpty = before.length === 0;
-                const run = isEmpty ? generate : edit;
-                return run(vm, {apiKey, instruction, targetId});
-            })
-            .then(after => {
-                this.appendHistory(instruction, before, after, 'done');
-                this.setState({busy: false, instructionDraft: ''});
+            .then(() => propose(vm, {apiKey: this.state.apiKey, instruction, targetId, history}))
+            .then(({answer, proposal}) => {
+                // AUTO_CLASSIFY true → keep the model's answer/proposal split. When
+                // the gate is off, a build path would force every turn to a proposal.
+                const aiTurn = (AUTO_CLASSIFY && proposal) ?
+                    {
+                        id: this.nextId++,
+                        role: 'ai',
+                        kind: 'proposal',
+                        text: answer || '',
+                        instruction,
+                        targetId,
+                        preview: proposal,
+                        baseStamp: proposal.baseStamp,
+                        status: 'pending'
+                    } :
+                    {
+                        id: this.nextId++,
+                        role: 'ai',
+                        kind: 'answer',
+                        text: answer || '',
+                        instruction,
+                        targetId
+                    };
+                this.setState(prev => {
+                    const turns = prev.turns.concat(aiTurn);
+                    saveChat(turns);
+                    return {turns, busy: false};
+                });
             })
             .catch(err => {
+                // network / parse / empty-envelope / deleted-pinned-sprite (propose
+                // throws) → error state; lastInstruction is kept for Try-again.
                 // eslint-disable-next-line no-console
-                console.error('[vibe] request failed:', err);
-                this.appendHistory(instruction, [], [], 'failed');
+                console.error('[vibe] propose failed:', err);
                 this.setState({busy: false, error: true});
             });
     }
-    appendHistory (instruction, before, after, status) {
-        let changes = [];
-        if (status === 'done') {
-            changes = diff(before, after).reduce((acc, op) => {
-                if (op.type === 'add') acc.push({kind: 'added', script: op.script});
-                else if (op.type === 'replace') acc.push({kind: 'updated', script: op.script});
-                else if (op.type === 'remove') acc.push({kind: 'removed', script: before[op.index]});
-                return acc;
-            }, []);
-        }
-        const entry = {id: this.nextHistoryId++, instruction, changes, status};
-        const history = this.state.history.concat(entry);
-        saveHistory(history);
-        this.setState({history});
-    }
     handleClearHistory () {
-        saveHistory([]);
-        this.setState({history: []});
+        saveChat([]);
+        this.setState({turns: []});
     }
     handleSubmitInstruction (e) {
         e.preventDefault();
         const instruction = this.state.instructionDraft.trim();
         const vm = this.props.vm;
-        if (!instruction || this.state.busy || !this.state.apiKey ||
-            !vm || !vm.editingTarget) {
-            return;
-        }
-        // Pin the sprite now AND remember it so Try-again replays the SAME target
-        // even if the child switches sprites after an error.
+        if (!instruction || this.state.busy || !this.state.apiKey || !vm || !vm.editingTarget) return;
+        // Pin the sprite NOW; propose/apply use this id even if the child switches
+        // sprites mid-request. A deleted pinned sprite → propose throws → error.
         const targetId = vm.editingTarget.id;
-        this.setState({lastInstruction: {instruction, targetId}});
-        this.runInstruction(instruction, targetId);
+        // Submit ONLY appends a user turn; it never injects and never stopAll()s
+        // (that moved into applyProposal). Clear the draft immediately so the child
+        // sees their message land and can't double-submit the same text.
+        const userTurn = {id: this.nextId++, role: 'user', text: instruction};
+        this.setState(prev => {
+            const turns = prev.turns.concat(userTurn);
+            saveChat(turns);
+            return {turns, instructionDraft: ''};
+        });
+        this.runProposeFor(instruction, targetId);
+    }
+    handleApply (turn) {
+        // HARD GATE 1 — single-flight: a synchronous instance flag so two Apply
+        // clicks in the same tick call applyProposal only ONCE (a child mashing the
+        // button must not double-inject).
+        if (this.applying || !turn || !turn.preview) return;
+        this.applying = true;
+        const vm = this.props.vm;
+        Promise.resolve()
+            .then(() => applyProposal(vm, turn.preview))
+            // ok → applied; stale (workspace changed since propose) → stale.
+            .then(res => this.setTurnStatus(turn.id, res.ok ? 'applied' : 'stale'))
+            // HARD GATE 2 — catch → Rebuild: applyEdit is non-atomic (delete-loop then
+            // inject-loop, no rollback). A reject may leave the workspace dirty, so
+            // mark the turn stale (child rebuilds) rather than crash.
+            .catch(err => {
+                // eslint-disable-next-line no-console
+                console.error('[vibe] apply failed:', err);
+                this.setTurnStatus(turn.id, 'stale');
+            })
+            // Clear the single-flight flag on BOTH success and reject.
+            .then(() => {
+                this.applying = false;
+            });
+    }
+    handleIgnore (turn) {
+        if (!turn) return;
+        this.setTurnStatus(turn.id, 'ignored'); // terminal
+    }
+    handleRebuild (turn) {
+        if (!turn) return;
+        this.runProposeFor(turn.instruction, turn.targetId); // append NEW pending, keep the old turn
+    }
+    handleMakeIt (turn) {
+        if (!turn) return;
+        this.runProposeFor(turn.instruction, turn.targetId);
     }
     handleRetry () {
+        // Replay the PINNED instruction+target after a FAILED turn (network/parse).
+        // Routes through runProposeFor so it pushes NO duplicate user turn.
         const last = this.state.lastInstruction;
         if (!last || this.state.busy || !this.state.apiKey) return;
-        this.runInstruction(last.instruction, last.targetId);
+        this.runProposeFor(last.instruction, last.targetId);
+    }
+    handleContextTurnsChange (n) {
+        // Task 10 wires the slider UI; the handler + state live here. Persist the
+        // FULL prefs object — never a partial {contextTurns} write (regression guard).
+        const {position, collapsed, size} = this.state;
+        this.setState({contextTurns: n});
+        savePrefs({...position, collapsed, w: size.w, h: size.h, contextTurns: n});
     }
     render () {
         return (
@@ -309,12 +385,18 @@ class VibePrompt extends React.Component {
                 collapsed={this.state.collapsed}
                 position={this.state.position}
                 size={this.state.size}
-                history={this.state.history}
+                turns={this.state.turns}
+                contextTurns={this.state.contextTurns}
                 vm={this.props.vm}
                 onCancelKey={this.handleBackFromKey}
                 onEditKey={this.handleEditKey}
                 onChipClick={this.handleChipClick}
                 onClearHistory={this.handleClearHistory}
+                onApply={this.handleApply}
+                onIgnore={this.handleIgnore}
+                onRebuild={this.handleRebuild}
+                onMakeIt={this.handleMakeIt}
+                onContextTurnsChange={this.handleContextTurnsChange}
                 onRetry={this.handleRetry}
                 onToggleCollapse={this.handleToggleCollapse}
                 onDragStop={this.handleDragStop}
