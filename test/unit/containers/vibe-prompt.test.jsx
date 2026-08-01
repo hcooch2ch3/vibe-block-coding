@@ -7,6 +7,7 @@ import {mountWithIntl} from '../../helpers/intl-helpers.jsx';
 import VibePromptConnected, {VibePromptContainer} from '../../../src/containers/vibe-prompt';
 import {saveKey, clearKey} from '../../../src/lib/ai-harness/key-store';
 import * as devConsole from '../../../src/lib/ai-harness/dev-console';
+import * as glowModule from '../../../src/lib/ai-harness/glow';
 import * as uiPrefs from '../../../src/lib/ai-harness/ui-prefs';
 import * as chatStore from '../../../src/lib/ai-harness/chat-store';
 
@@ -107,6 +108,38 @@ describe('VibePrompt container', () => {
             await flushPromises();
             expect(applySpy).toHaveBeenCalledTimes(1);
             expect(applySpy.mock.calls[0][1]).toEqual(makeProposal());
+            expect(wrapper.instance().state.turns[0].status).toBe('applied');
+        });
+
+        test('glow is fail-open: a successful Apply stays "applied" even when the workspace is unavailable', async () => {
+            const vm = makeVm({});
+            jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true, changedTopIds: ['hat-1']}));
+            const wrapper = render(vm);
+            const turn = {id: 5, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn]});
+            // Under jsdom runGlow acquires the real ScratchBlocks singleton but
+            // getMainWorkspace() is null → glowChangedBlocks no-ops. This covers the
+            // null-workspace branch; the throw path is covered by the next test.
+            expect(() => wrapper.instance().handleApply(turn)).not.toThrow();
+            await flushPromises();
+            expect(wrapper.instance().state.turns[0].status).toBe('applied');
+        });
+
+        test('a glow throw during Apply is swallowed — status stays applied (fail-open catch)', async () => {
+            const vm = makeVm({});
+            jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true, changedTopIds: ['hat-1']}));
+            // Force runGlow's body to throw so its try/catch — the actual fail-open
+            // guard — is the thing under test (not the null-workspace early return).
+            jest.spyOn(glowModule, 'glowChangedBlocks').mockImplementation(() => {
+                throw new Error('boom');
+            });
+            const wrapper = render(vm);
+            const turn = {id: 6, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn]});
+            expect(() => wrapper.instance().handleApply(turn)).not.toThrow();
+            await flushPromises();
             expect(wrapper.instance().state.turns[0].status).toBe('applied');
         });
 

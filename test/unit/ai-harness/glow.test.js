@@ -113,14 +113,15 @@ describe('glowChangedBlocks', () => {
         expect(ws.calls).toEqual([['a', true]]); // OFF skipped because getBlockById → null
     });
 
-    test('cancel() clears the exact stored timer handle and stops the un-glow', () => {
+    test('cancel() clears the exact stored timer handle AND un-glows so no glow is stranded', () => {
         const ws = fakeWorkspace();
         const clk = fakeClock();
         const cancel = glowChangedBlocks(ws, ['a'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
         cancel();
-        expect(clk.cleared()).toBe('timer-token'); // the handle setTimeoutFn returned, threaded through
-        clk.tick(); // cleared → callback never runs
-        expect(ws.calls).toEqual([['a', true]]);
+        expect(clk.cleared()).toBe('timer-token'); // the exact handle setTimeoutFn returned, threaded through
+        expect(ws.calls).toEqual([['a', true], ['a', false]]); // cancel turns the glow OFF, not just drops the timer
+        clk.tick(); // timer already cleared → no double un-glow
+        expect(ws.calls).toEqual([['a', true], ['a', false]]);
     });
 
     test('a custom glowMs is passed through to the scheduler', () => {

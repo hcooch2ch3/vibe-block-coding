@@ -6,6 +6,8 @@ import VM from 'scratch-vm';
 
 import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
 import {propose, applyProposal} from '../lib/ai-harness/dev-console';
+import {glowChangedBlocks} from '../lib/ai-harness/glow';
+import VMScratchBlocks from '../lib/blocks';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
 import {loadChat, saveChat} from '../lib/ai-harness/chat-store';
 import {
@@ -56,6 +58,9 @@ class VibePrompt extends React.Component {
         // clicks in the same tick are rejected synchronously, before the awaited
         // applyProposal can double-inject.
         this.applying = false;
+        // Cancel handle for the current canvas glow (Surface B). Cleared on
+        // re-apply and unmount so a pending un-glow never fires on a dead workspace.
+        this.cancelGlow = null;
         const viewport = {innerWidth: window.innerWidth, innerHeight: window.innerHeight};
         const prefs = loadPrefs();
         const collapsed = prefs ? prefs.collapsed : false;
@@ -97,6 +102,7 @@ class VibePrompt extends React.Component {
     componentWillUnmount () {
         window.removeEventListener('resize', this.handleResize);
         this.removeResizeListeners();
+        if (this.cancelGlow) this.cancelGlow();
     }
     removeResizeListeners () {
         // removeEventListener on a listener that was never added is a no-op, so we
@@ -341,7 +347,12 @@ class VibePrompt extends React.Component {
         Promise.resolve()
             .then(() => applyProposal(vm, turn.preview))
             // ok → applied; stale (workspace changed since propose) → stale.
-            .then(res => this.setTurnStatus(turn.id, res.ok ? 'applied' : 'stale'))
+            .then(res => {
+                this.setTurnStatus(turn.id, res.ok ? 'applied' : 'stale');
+                // Surface B glow runs AFTER status is set, isolated in runGlow — a
+                // glow throw can never reach the .catch below and mislabel a good Apply.
+                if (res.ok) this.runGlow(res.changedTopIds);
+            })
             // HARD GATE 2 — catch → Rebuild: applyEdit is non-atomic (delete-loop then
             // inject-loop, no rollback). A reject may leave the workspace dirty, so
             // mark the turn stale (child rebuilds) rather than crash.
@@ -355,6 +366,21 @@ class VibePrompt extends React.Component {
                 this.applying = false;
                 this.setState({busy: false});
             });
+    }
+    // Surface B: glow the stacks this Apply changed. Fully isolated + fail-open —
+    // acquiring the workspace or glowing must NEVER throw into the apply-status
+    // chain (glowStack throws on a missing id). cat-blocks mode uses a different
+    // Blockly singleton whose mainWorkspace may be null → the null-check skips glow.
+    runGlow (changedTopIds) {
+        if (!changedTopIds || changedTopIds.length === 0) return;
+        try {
+            const SB = VMScratchBlocks(this.props.vm, false);
+            const ws = SB && SB.getMainWorkspace ? SB.getMainWorkspace() : null;
+            if (this.cancelGlow) this.cancelGlow();
+            this.cancelGlow = glowChangedBlocks(ws, changedTopIds);
+        } catch (e) {
+            // fail-open: animation is decoration; Apply already succeeded.
+        }
     }
     handleIgnore (turn) {
         if (!turn) return;

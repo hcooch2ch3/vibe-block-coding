@@ -47,13 +47,20 @@ export const glowChangedBlocks = function (workspace, topIds, opts) {
     }
     if (glowing.length === 0) return noop;
 
-    const timer = setTimeoutFn(() => {
+    // Un-glow the lit stacks. Shared by the timer (normal expiry) AND cancel(), so
+    // cancelling on a re-glow or an unmount within the window never STRANDS a glow
+    // on the live canvas — it turns it off rather than just dropping the timer.
+    const unglow = function () {
         for (const id of glowing) {
             try {
                 if (workspace.getBlockById(id)) workspace.glowStack(id, false);
             } catch (e) { /* block gone since — nothing to un-glow */ }
         }
-    }, glowMs);
+    };
+    const timer = setTimeoutFn(unglow, glowMs);
 
-    return () => clearTimeoutFn(timer);
+    return () => {
+        clearTimeoutFn(timer);
+        unglow();
+    };
 };
