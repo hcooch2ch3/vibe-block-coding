@@ -8,7 +8,7 @@
  * installDevConsole 은 dev 빌드에서 window.vibe 로 이 함수들을 노출한다.
  */
 
-import {requestScripts, DEFAULT_MODEL} from './llm';
+import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
 import {compile, decompile} from './dsl';
 import {applyEdit} from './edit';
 
@@ -56,6 +56,27 @@ export const edit = async function (vm, opts, fetchImpl) {
 };
 
 /**
+ * Dev-only gate helper: run build prompts through the ENVELOPE path (requestTurn)
+ * and report how many produced >=1 block. Measures what actually ships (the unified
+ * chat), used to decide auto-classify vs an explicit Build/Ask fallback
+ * (spec "Validation gate", 80% threshold).
+ * @param {VirtualMachine} vm - vm instance (kept for signature stability; unused internally)
+ * @param {object} opts - {apiKey, prompts, model?}
+ * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
+ * @returns {Promise<{total:number, produced:number, rate:number}>}
+ */
+export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fetchImpl) {
+    let produced = 0;
+    for (const instruction of prompts) {
+        try {
+            const out = await requestTurn({apiKey, model, instruction}, fetchImpl);
+            if (out.blocks && out.blocks.length) produced++;
+        } catch (e) { /* count as not produced */ }
+    }
+    return {total: prompts.length, produced, rate: prompts.length ? produced / prompts.length : 0};
+};
+
+/**
  * dev 빌드 전용: window.vibe 로 파이프라인을 노출한다. 브라우저 콘솔에서
  * `await vibe.smoke('sk-ant-...')` 로 생성→편집 루프를 실제 API 로 검증할 수 있다.
  * @param {VirtualMachine} vm - 현재 vm 인스턴스
@@ -73,6 +94,8 @@ export const installDevConsole = function (vm) {
             generate(vm, {apiKey, instruction, model}),
         edit: (apiKey, instruction, model) =>
             edit(vm, {apiKey, instruction, model}),
+        measure: (apiKey, prompts, model) =>
+            measureBuildRate(vm, {apiKey, prompts, model}),
         // 라이브 스모크: 생성 한 번, 편집 한 번. before/after DSL 을 로그로 남긴다.
         smoke: async (apiKey, model) => {
             const before = await generate(
