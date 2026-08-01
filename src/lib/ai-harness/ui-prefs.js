@@ -32,7 +32,8 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 /**
  * @param {object} [storage] - defaults to window.localStorage
- * @returns {?{x:number,y:number,collapsed:boolean}} parsed prefs, or null if
+ * @returns {?object} parsed prefs object with {x:number, y:number,
+ *   collapsed:boolean, w:?number, h:?number, contextTurns:number}, or null if
  *   absent / storage unavailable / malformed.
  */
 export const loadPrefs = function (storage = defaultStorage()) {
@@ -51,7 +52,7 @@ export const loadPrefs = function (storage = defaultStorage()) {
             w: Number.isFinite(parsed.w) ? parsed.w : null,
             h: Number.isFinite(parsed.h) ? parsed.h : null,
             contextTurns: clamp(
-                Number.isFinite(parsed.contextTurns) ? parsed.contextTurns : DEFAULT_CONTEXT_TURNS,
+                Math.round(Number.isFinite(parsed.contextTurns) ? parsed.contextTurns : DEFAULT_CONTEXT_TURNS),
                 0,
                 MAX_CONTEXT_TURNS
             )
@@ -62,7 +63,7 @@ export const loadPrefs = function (storage = defaultStorage()) {
 };
 
 /**
- * @param {object} prefs - the prefs to persist ({x, y, collapsed})
+ * @param {object} prefs - the prefs to persist ({x, y, collapsed, w, h, contextTurns})
  * @param {object} [storage] - defaults to window.localStorage
  * @returns {boolean} - true if persisted; false if storage rejected the write
  */
@@ -76,7 +77,9 @@ export const savePrefs = function (prefs, storage = defaultStorage()) {
         };
         if (Number.isFinite(prefs.w)) out.w = prefs.w;
         if (Number.isFinite(prefs.h)) out.h = prefs.h;
-        if (Number.isFinite(prefs.contextTurns)) out.contextTurns = clamp(prefs.contextTurns, 0, MAX_CONTEXT_TURNS);
+        if (Number.isFinite(prefs.contextTurns)) {
+            out.contextTurns = clamp(Math.round(prefs.contextTurns), 0, MAX_CONTEXT_TURNS);
+        }
         storage.setItem(STORAGE_KEY, JSON.stringify(out));
         return true;
     } catch (e) {

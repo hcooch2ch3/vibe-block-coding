@@ -143,5 +143,15 @@ describe('ui-prefs', () => {
             const p = loadPrefs(s);
             expect(p).toMatchObject({x: 5, y: 6, w: 260, h: 200, contextTurns: 4});
         });
+        test('contextTurns rounds a float to the nearest integer', () => {
+            const s = makeStorage();
+            savePrefs({x: 1, y: 2, collapsed: false, contextTurns: 3.7}, s);
+            expect(loadPrefs(s).contextTurns).toBe(4);
+        });
+        test('contextTurns: 0 round-trips (not treated as falsy/absent)', () => {
+            const s = makeStorage();
+            savePrefs({x: 1, y: 2, collapsed: false, contextTurns: 0}, s);
+            expect(loadPrefs(s).contextTurns).toBe(0);
+        });
     });
 });
