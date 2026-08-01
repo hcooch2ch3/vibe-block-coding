@@ -2,6 +2,7 @@ import {
     DEFAULT_MODEL,
     buildSystemPrompt,
     buildUserPrompt,
+    buildEnvelopeSystemPrompt,
     parseDSL,
     parseEnvelope,
     requestScripts,
@@ -243,5 +244,23 @@ describe('requestTurn (fetch injected)', () => {
         expect(out.blocks).toHaveLength(1);
         const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
         expect(body.max_tokens).toBe(ENVELOPE_MAX_TOKENS);
+    });
+});
+
+describe('buildEnvelopeSystemPrompt invariants', () => {
+    test('buildEnvelopeSystemPrompt keeps DSL vocab and drops the array-only instruction', () => {
+        const p = buildEnvelopeSystemPrompt();
+        expect(p).toMatch(/move/);          // DSL vocab retained
+        expect(p).toMatch(/when_flag/);
+        expect(p).not.toMatch(/Reply with ONLY a JSON array/i);  // array-mode contradiction gone
+        expect(p).toMatch(/"blocks"/);      // envelope instruction present
+    });
+});
+
+describe('parseEnvelope bare-array lift', () => {
+    test('parseEnvelope: a bare array reply is lifted into blocks (model regressed to legacy shape)', () => {
+        const out = parseEnvelope('[{"hat":"when_flag","body":[["move",10]]}]');
+        expect(out.blocks).toHaveLength(1);
+        expect(out.answer).toBeUndefined();
     });
 });

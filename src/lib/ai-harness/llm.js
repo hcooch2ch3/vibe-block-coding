@@ -223,6 +223,15 @@ export const parseEnvelope = function (text) {
         throw e;
     }
     const out = {};
+    // Bare-array path: model regressed to legacy shape (emits [{hat,body},...] directly).
+    // Lift into blocks exactly like the object path — fail-closed on invalid or empty.
+    if (Array.isArray(obj)) {
+        if (obj.length) {
+            try { out.blocks = validateScripts(obj); }
+            catch (e) { /* fail-closed: drop invalid blocks */ }
+        }
+        return out;
+    }
     if (obj && typeof obj.answer === 'string' && obj.answer.trim()) out.answer = obj.answer;
     if (obj && Array.isArray(obj.blocks) && obj.blocks.length) {
         try {
