@@ -171,6 +171,12 @@ class VibePrompt extends React.Component {
         const dir = e.currentTarget.dataset.dir || 'se';
         const rect = e.currentTarget.parentNode.getBoundingClientRect();
         this.resizeCtx = {dir, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom};
+        // NOTE: on touch, the preventDefault above suppresses the browser's
+        // emulated mouse events (mousedown->mouseup) so they don't re-enter here
+        // via onMouseDown and double-register the listeners. This relies on React
+        // 16 attaching touch listeners NON-passive. If this fork is ever bumped to
+        // React 17+ (passive-by-default touch roots), preventDefault becomes a
+        // no-op here and that guard must move to a ref-based native touchstart.
         if (e.touches) {
             // passive:false so the touchmove handler is allowed to preventDefault
             // and stop the page from scrolling under the finger while resizing.
@@ -187,6 +193,7 @@ class VibePrompt extends React.Component {
         if (!ctx) return;
         // A touch event carries its point in touches[0], not on the event itself.
         const p = e.touches ? e.touches[0] : e;
+        if (!p) return; // defensive: no active touch point (e.g. touches:[]) — nothing to track
         // On touch, block the page scroll/zoom while dragging a grip.
         if (e.touches && e.cancelable) e.preventDefault();
         const d = ctx.dir;

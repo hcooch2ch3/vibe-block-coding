@@ -283,15 +283,18 @@
 }
 
 /* edges — grips are sized for finger targets on tablets, not just the mouse.
-   The corner offset (20px) keeps edge strips clear of the corner grips. */
-.rhN { top: 0; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
+   The corner offset (20px) keeps edge strips clear of the corner grips.
+   Top grips start below the header band (40px = HEADER_H in ui-prefs.js) so the
+   enlarged touch targets never sit under the drag handle or the ⚙/▾ buttons —
+   the header is drag-only, resizing starts just below it. */
+.rhN { top: 40px; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
 .rhS { bottom: 0; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
-.rhE { right: 0; top: 20px; bottom: 20px; width: 10px; cursor: ew-resize; }
-.rhW { left: 0; top: 20px; bottom: 20px; width: 10px; cursor: ew-resize; }
+.rhE { right: 0; top: 40px; bottom: 20px; width: 10px; cursor: ew-resize; }
+.rhW { left: 0; top: 40px; bottom: 20px; width: 10px; cursor: ew-resize; }
 
 /* corners (drawn after edges so they win the overlap) */
-.rhNe { top: 0; right: 0; width: 20px; height: 20px; cursor: nesw-resize; }
-.rhNw { top: 0; left: 0; width: 20px; height: 20px; cursor: nwse-resize; }
+.rhNe { top: 40px; right: 0; width: 20px; height: 20px; cursor: nesw-resize; }
+.rhNw { top: 40px; left: 0; width: 20px; height: 20px; cursor: nwse-resize; }
 .rhSw { bottom: 0; left: 0; width: 20px; height: 20px; cursor: nesw-resize; }
 
 .rhSe {

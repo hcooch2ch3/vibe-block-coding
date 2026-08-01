@@ -307,6 +307,35 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.position).toEqual({x: 100, y: 80}); // top-left fixed
         });
 
+        test('touch resize registers a non-passive touchmove listener, prevents scroll, and cleans up', () => {
+            const vm = makeVm({});
+            jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
+            const wrapper = render(vm);
+            const addSpy = jest.spyOn(window, 'addEventListener');
+            const removeSpy = jest.spyOn(window, 'removeEventListener');
+            const rect = {left: 100, top: 80, right: 400, bottom: 400};
+            const start = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn(),
+                touches: [{clientX: 100, clientY: 80}],
+                currentTarget: {dataset: {dir: 'se'}, parentNode: {getBoundingClientRect: () => rect}}
+            };
+            wrapper.instance().handleResizeStart(start);
+            // touchstart preventDefault suppresses the emulated mouse cascade
+            expect(start.preventDefault).toHaveBeenCalled();
+            const touchmoveCall = addSpy.mock.calls.find(c => c[0] === 'touchmove');
+            expect(touchmoveCall).toBeDefined();
+            expect(touchmoveCall[2]).toEqual({passive: false}); // required so move can preventDefault
+            // a cancelable touchmove blocks the page from scrolling under the finger
+            const move = {touches: [{clientX: 460, clientY: 500}], cancelable: true, preventDefault: jest.fn()};
+            wrapper.instance().handleResizeMove(move);
+            expect(move.preventDefault).toHaveBeenCalled();
+            wrapper.instance().handleResizeStop();
+            expect(removeSpy).toHaveBeenCalledWith('touchmove', wrapper.instance().handleResizeMove);
+            addSpy.mockRestore();
+            removeSpy.mockRestore();
+        });
+
         test('resize-stop persists the size', () => {
             const vm = makeVm({});
             const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
