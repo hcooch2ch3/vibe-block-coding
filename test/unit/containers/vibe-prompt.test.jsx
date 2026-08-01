@@ -665,6 +665,16 @@ describe('VibePrompt container', () => {
                 expect(entry.baseStamp).toBeUndefined();
             });
         });
+
+        test('returns [] when contextTurns is 0 (does not leak the whole transcript)', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({turns: [
+                {id: 0, role: 'user', text: 'a'}, {id: 1, role: 'ai', kind: 'answer', text: 'b'},
+                {id: 2, role: 'user', text: 'c'}, {id: 3, role: 'ai', kind: 'answer', text: 'd'}
+            ], contextTurns: 0});
+            expect(wrapper.instance().buildHistoryWindow()).toEqual([]);
+        });
     });
 
     describe('redux wiring', () => {

@@ -15,8 +15,11 @@ import {
 } from '../lib/ai-harness/ui-prefs';
 
 // Task 0 gate: route the model's envelope through the answer/proposal split
-// (a text reply stays an answer; blocks become a pending proposal). Defaults true
-// until a human measures the build rate; when false, every submit is a build.
+// (a text reply stays an answer; blocks become a pending proposal). Shipped true.
+// WARNING: do NOT flip to false — the false path is NOT yet implemented. With
+// AUTO_CLASSIFY===false the ternary below routes every turn (including real
+// proposals) to the answer branch and drops proposal.blocks entirely. An explicit
+// Build/Ask control must be built (see plan addendum) BEFORE this flag is flipped.
 const AUTO_CLASSIFY = true;
 
 class VibePrompt extends React.Component {
@@ -240,8 +243,11 @@ class VibePrompt extends React.Component {
         // Last `contextTurns` round-trips of {role, text} ONLY — never the preview
         // block payload or baseStamp (they'd bloat the prompt and leak internals).
         // length <= contextTurns*2 (a round-trip is a user turn + an ai turn).
+        // Guard n===0: slice(-0) === slice(0) === the whole array, so we must
+        // short-circuit — "remember 0 turns" must send an empty context window.
         const n = this.state.contextTurns;
-        return this.state.turns.slice(-n * 2).map(t => ({role: t.role, text: t.text}));
+        const win = n > 0 ? this.state.turns.slice(-n * 2) : [];
+        return win.map(t => ({role: t.role, text: t.text}));
     }
     // Immutably flip one turn's status by id, then persist. Used by apply / ignore.
     setTurnStatus (id, status) {
@@ -262,8 +268,11 @@ class VibePrompt extends React.Component {
         return Promise.resolve()
             .then(() => propose(vm, {apiKey: this.state.apiKey, instruction, targetId, history}))
             .then(({answer, proposal}) => {
-                // AUTO_CLASSIFY true → keep the model's answer/proposal split. When
-                // the gate is off, a build path would force every turn to a proposal.
+                // AUTO_CLASSIFY true (shipped) → keep the model's answer/proposal
+                // split. The false path is NOT yet implemented: flipping the flag
+                // currently routes every turn to the answer branch and drops
+                // proposal.blocks — an explicit Build/Ask control must be built
+                // (see plan addendum) before the flag is changed.
                 const aiTurn = (AUTO_CLASSIFY && proposal) ?
                     {
                         id: this.nextId++,
