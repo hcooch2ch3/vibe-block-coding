@@ -2,7 +2,7 @@
 // smoke test and (week 2) the UI both call. Driven against a real headless
 // scratch-vm; only fetch is mocked.
 import {generate, edit, measureBuildRate, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
-import {compile, decompile} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
 import {hashProgram} from '../../../src/lib/ai-harness/base-hash';
 import {makeHeadlessVM} from './headless-target';
 
@@ -136,7 +136,7 @@ describe('applyProposal', () => {
         const proposal = {kind: 'generate', blocks: [{hat: 'when_clicked', body: [['move', 10]]}],
             baseStamp: {targetId: target.id, baseHash: hashProgram([])}};
         const out = await applyProposal(vm, proposal);
-        expect(out).toEqual({ok: true});
+        expect(out.ok).toBe(true);
         expect(decompile(target.blocks)).toEqual([{hat: 'when_clicked', body: [['move', 10]]}]);
     });
 
@@ -183,7 +183,7 @@ describe('applyProposal', () => {
         expect(proposal.kind).toBe('edit');
         // apply the edit proposal
         const out = await applyProposal(vm, proposal);
-        expect(out).toEqual({ok: true});
+        expect(out.ok).toBe(true);
         expect(asSet(decompile(target.blocks))).toEqual(asSet([editedScript]));
     });
 
@@ -211,5 +211,57 @@ describe('applyProposal', () => {
         expect(out).toEqual({ok: false, stale: true});
         expect(shareSpy).not.toHaveBeenCalled();
         expect(asSet(decompile(target.blocks))).toEqual(asSet(beforeApply));
+    });
+
+    test('applyProposal generate returns changedTopIds that exist in the target', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const {proposal} = await propose(
+            vm,
+            {apiKey: 'k', instruction: 'walk', targetId: target.id},
+            blocksFetch('ok', [flag([['move', 10]])]) // envelope shape, matching the rest of the propose suite
+        );
+        expect(proposal.kind).toBe('generate');
+        const out = await applyProposal(vm, proposal);
+        expect(out.ok).toBe(true);
+        expect(Array.isArray(out.changedTopIds)).toBe(true);
+        expect(out.changedTopIds.length).toBe(1);
+        // falsifiable "no dead id" invariant: every glow target must exist in the vm
+        out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
+    });
+
+    test('applyProposal edit returns only the added/replaced hats, not kept ones', async () => {
+        const {vm, target} = makeHeadlessVM();
+        // seed two scripts so one can be kept while the other is edited
+        await generate(vm, {apiKey: 'k', instruction: 'seed', targetId: target.id},
+            fetchReturning([flag([['move', 10]]), flag([['say', 'hi']])]));
+        const keptHatsBefore = scriptHatIds(target.blocks);
+        // edit: keep script 0 as-is, change script 1's body → replace
+        const {proposal} = await propose(
+            vm,
+            {apiKey: 'k', instruction: 'change second', targetId: target.id},
+            blocksFetch('ok', [flag([['move', 10]]), flag([['say', 'bye']])])
+        );
+        expect(proposal.kind).toBe('edit');
+        const out = await applyProposal(vm, proposal);
+        expect(out.ok).toBe(true);
+        // exactly one changed top (the replaced script); the kept hat id is NOT included
+        expect(out.changedTopIds.length).toBe(1);
+        out.changedTopIds.forEach(id => expect(keptHatsBefore).not.toContain(id));
+        out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
+    });
+
+    test('applyProposal keep-only edit returns an empty changedTopIds', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await generate(vm, {apiKey: 'k', instruction: 'seed', targetId: target.id},
+            fetchReturning([flag([['move', 10]])]));
+        const {proposal} = await propose(
+            vm,
+            {apiKey: 'k', instruction: 'no change', targetId: target.id},
+            blocksFetch('ok', [flag([['move', 10]])]) // identical → keep-only
+        );
+        expect(proposal.kind).toBe('edit');
+        const out = await applyProposal(vm, proposal);
+        expect(out.ok).toBe(true);
+        expect(out.changedTopIds).toEqual([]);
     });
 });

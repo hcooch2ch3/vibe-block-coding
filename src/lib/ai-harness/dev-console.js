@@ -9,7 +9,7 @@
  */
 
 import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
-import {compile, decompile} from './dsl';
+import {compile, decompile, scriptHatIds} from './dsl';
 import {applyEdit} from './edit';
 import {hashProgram, targetMatchesBase} from './base-hash';
 
@@ -133,7 +133,9 @@ export const propose = async function (vm, opts, fetchImpl) {
  *
  * @param {VirtualMachine} vm - scratch-vm instance
  * @param {object} proposal - {kind, blocks|oldScripts+newScripts, baseStamp}
- * @returns {Promise<object>} object with ok boolean and optional stale boolean
+ * @returns {Promise<object>} {ok:false, stale:true} when stale; otherwise
+ *   {ok:true, changedTopIds} where changedTopIds are the vm hat ids this apply
+ *   added or replaced (empty for a keep-only edit) — for the canvas glow.
  */
 export const applyProposal = async function (vm, proposal) {
     const {targetId, baseHash} = proposal.baseStamp;
@@ -141,6 +143,12 @@ export const applyProposal = async function (vm, proposal) {
     // misc(a): stop threads ONLY here, at Apply — propose must not touch the running
     // project. applyEdit's deleteBlock can orphan a running script otherwise.
     vm.stopAll();
+    // Recover the REAL post-injection hat ids. shareBlocksToTarget runs newBlockIds
+    // on a deep clone, so compile-time ids are discarded — the only ids that reach
+    // the workspace are the vm's. Snapshot before, diff after: added + replaced hats
+    // are present after but not before; kept hats keep their id; removed hats vanish.
+    const target = vm.runtime.getTargetById(targetId);
+    const before = new Set(scriptHatIds(target.blocks));
     if (proposal.kind === 'generate') {
         await vm.shareBlocksToTarget(compile(proposal.blocks), targetId);
         vm.refreshWorkspace();
@@ -149,7 +157,8 @@ export const applyProposal = async function (vm, proposal) {
     } else {
         throw new Error(`applyProposal: unknown proposal kind: ${proposal.kind}`);
     }
-    return {ok: true};
+    const changedTopIds = scriptHatIds(target.blocks).filter(id => !before.has(id));
+    return {ok: true, changedTopIds};
 };
 
 /**
