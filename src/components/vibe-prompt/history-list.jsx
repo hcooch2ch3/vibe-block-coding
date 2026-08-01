@@ -25,7 +25,22 @@ const messages = defineMessages({
 class HistoryList extends React.Component {
     constructor (props) {
         super(props);
-        bindAll(this, ['renderRow']);
+        bindAll(this, ['renderRow', 'setScrollRef']);
+        this.scrollRef = null;
+    }
+    componentDidMount () {
+        this.scrollToBottom();
+    }
+    componentDidUpdate (prevProps) {
+        // Follow a newly appended turn (e.g. a Rebuild proposal added below) into
+        // view so the child sees the fresh card without reaching for the scrollbar.
+        if (this.props.turns.length > prevProps.turns.length) this.scrollToBottom();
+    }
+    setScrollRef (el) {
+        this.scrollRef = el;
+    }
+    scrollToBottom () {
+        if (this.scrollRef) this.scrollRef.scrollTop = this.scrollRef.scrollHeight;
     }
     renderRow (turn) {
         const {vm, onApply, onIgnore, onRebuild, onMakeIt} = this.props;
@@ -60,7 +75,10 @@ class HistoryList extends React.Component {
                         {'🗑'}
                     </button>
                 </div>
-                <div className={styles.historyScroll}>
+                <div
+                    className={styles.historyScroll}
+                    ref={this.setScrollRef}
+                >
                     {turns.map(this.renderRow)}
                 </div>
             </div>

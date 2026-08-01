@@ -153,6 +153,11 @@ const RESIZE_HANDLES = [
     {dir: 'ne', cls: 'rhNe'}, {dir: 'nw', cls: 'rhNw'}, {dir: 'se', cls: 'rhSe'}, {dir: 'sw', cls: 'rhSw'}
 ];
 
+// Default height (px) for the chat view when the child hasn't resized the card, so
+// the chat log fills the space and the composer (input + chips) sits at the bottom
+// like a normal chat rather than floating near the top. A user resize overrides it.
+const DEFAULT_CHAT_H = 320;
+
 const VibePromptComponent = props => {
     const {
         intl, hasKey, busy, error,
@@ -166,9 +171,13 @@ const VibePromptComponent = props => {
         contextTurns, onContextTurnsChange
     } = props;
 
-    const sized = Boolean(size.h) && !collapsed;
+    // Chat mode (key set, expanded): give the card a comfortable default height so the
+    // log fills it and the composer pins to the bottom. A stored/resized height wins.
+    const chatMode = hasKey && !collapsed;
+    const cardH = size.h || (chatMode ? DEFAULT_CHAT_H : null);
+    const sized = Boolean(cardH) && !collapsed;
     const cardStyle = {width: size.w};
-    if (sized) cardStyle.height = size.h;
+    if (sized) cardStyle.height = cardH;
 
     const keyEntry = (
         <div className={styles.body}>
@@ -249,7 +258,7 @@ const VibePromptComponent = props => {
                 onMakeIt={onMakeIt}
             />
             <form
-                className={styles.row}
+                className={classNames(styles.row, styles.composerAnchor)}
                 onSubmit={onSubmitInstruction}
             >
                 <span className={styles.icon}>{'💬'}</span>

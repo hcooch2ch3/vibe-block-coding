@@ -372,6 +372,13 @@
     max-height: none;
 }
 
+/* In the flex-column chat body, push the composer (input row + chips below it) to
+   the bottom so the child types at the bottom like a chat, even when the log is
+   short/empty. In the non-flex key-entry body an auto vertical margin is inert. */
+.composerAnchor {
+    margin-top: auto;
+}
+
 /* Conversation-memory slider row (shown in the ⚙ settings / key-entry view) */
 .memoryRow {
     display: flex;
