@@ -1,33 +1,45 @@
-// Surface B animation: briefly glow the block stacks that an Apply just added or
+// Surface B animation: briefly pulse the block stacks that an Apply just added or
 // changed, so the child sees WHAT changed on the real canvas.
 //
+// Mechanism: add a CSS class (see glow.css) to each changed hat's SVG group; the
+// class runs a short Scratch-blue pulse, then the class is removed. We drive the
+// timing here so the effect is cancelable (re-apply / unmount).
+//
 // Pure with respect to its dependencies: the caller passes the Blockly workspace
-// (or null) and, in tests, a fake scheduler. It never throws — scratch-blocks'
-// glowStack(id, true) THROWS on a missing id, so every call is guarded and we
-// fail open (a broken animation must never break Apply).
+// (or null), the resolved CSS class name, and — in tests — a fake scheduler. It
+// never throws (a torn-down block can throw on getSvgRoot); every touch is guarded
+// and we fail open (a broken animation must never break Apply).
 
 export const GLOW_MS = 1200;
+export const GLOW_CLASS = 'vibe-glow-pulse';
 export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
 const noop = () => {};
 
 // True when the OS "reduce motion" setting is on. Guards Surface B specifically:
-// a CSS @media query cannot reach this JS-driven glow (that only covers Surface A).
+// a CSS @media query alone cannot stop us from adding the class, so we also gate here.
 const prefersReducedMotion = function () {
     return typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia(REDUCED_MOTION_QUERY).matches;
 };
 
+// The SVG group element for a hat id, or null. getBlockById → BlockSvg → getSvgRoot().
+const svgRootFor = function (workspace, id) {
+    const block = workspace.getBlockById(id);
+    return block && typeof block.getSvgRoot === 'function' ? block.getSvgRoot() : null;
+};
+
 /**
- * Glow the given top-block stacks, then un-glow them after glowMs.
- * @param {object|null} workspace - Blockly workspace (glowStack + getBlockById), or null
- * @param {Array<string>} topIds - hat block ids to glow
- * @param {object} [opts] - {glowMs, reducedMotion, setTimeoutFn, clearTimeoutFn}
- * @returns {Function} cancel — clears the pending un-glow timer (always safe to call)
+ * Pulse the given top-block stacks, then stop after glowMs.
+ * @param {object|null} workspace - Blockly workspace (getBlockById), or null
+ * @param {Array<string>} topIds - hat block ids to pulse
+ * @param {object} [opts] - {className, glowMs, reducedMotion, setTimeoutFn, clearTimeoutFn}
+ * @returns {Function} cancel — removes the class + clears the timer (always safe to call)
  */
 export const glowChangedBlocks = function (workspace, topIds, opts) {
     const o = opts || {};
+    const className = o.className || GLOW_CLASS;
     const glowMs = typeof o.glowMs === 'number' ? o.glowMs : GLOW_MS;
     const reducedMotion = typeof o.reducedMotion === 'boolean' ? o.reducedMotion : prefersReducedMotion();
     const setTimeoutFn = o.setTimeoutFn || setTimeout;
@@ -38,23 +50,28 @@ export const glowChangedBlocks = function (workspace, topIds, opts) {
     const ids = Array.isArray(topIds) ? topIds : [];
     if (!workspace || ids.length === 0 || reducedMotion) return noop;
 
-    const glowing = [];
+    const glowed = [];
     for (const id of ids) {
         try {
-            workspace.glowStack(id, true); // THROWS on a missing id → skip that one
-            glowing.push(id);
+            const root = svgRootFor(workspace, id);
+            if (root && root.classList) {
+                // runGlow() cancels the prior glow (removing the class) before this
+                // runs, so the class is freshly added here — one clean pulse.
+                root.classList.add(className);
+                glowed.push(root);
+            }
         } catch (e) { /* dead id / torn-down SVG — fail open */ }
     }
-    if (glowing.length === 0) return noop;
+    if (glowed.length === 0) return noop;
 
-    // Un-glow the lit stacks. Shared by the timer (normal expiry) AND cancel(), so
-    // cancelling on a re-glow or an unmount within the window never STRANDS a glow
-    // on the live canvas — it turns it off rather than just dropping the timer.
+    // Remove the class from the roots we captured. Shared by the timer (normal
+    // expiry) AND cancel(), so cancelling on a re-glow or an unmount within the
+    // window never STRANDS a pulse — it stops it rather than just dropping the timer.
     const unglow = function () {
-        for (const id of glowing) {
+        for (const root of glowed) {
             try {
-                if (workspace.getBlockById(id)) workspace.glowStack(id, false);
-            } catch (e) { /* block gone since — nothing to un-glow */ }
+                root.classList.remove(className);
+            } catch (e) { /* element detached since — nothing to remove */ }
         }
     };
     const timer = setTimeoutFn(unglow, glowMs);

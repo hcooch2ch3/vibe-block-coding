@@ -1,0 +1,23 @@
+/* Surface B canvas glow — a short Scratch-blue pulse on a changed block stack.
+ * The class is added to a block's SVG group by glow.js; css-loader hashes the
+ * local name, and the container passes the hashed name back into glowChangedBlocks.
+ * Scratch blue = #4C97FF (rgb 76,151,255) — the editor's signature accent, and
+ * distinct from the yellow "running" glow so "changed" never reads as "running". */
+
+.pulse {
+    animation: vibeGlowPulse 1.2s ease-in-out;
+    /* drop-shadow follows the block outline, so the halo hugs the stack shape */
+    will-change: filter;
+}
+
+@keyframes vibeGlowPulse {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(76, 151, 255, 0)); }
+    30%, 70% { filter: drop-shadow(0 0 8px rgba(76, 151, 255, 0.95)); }
+    50%      { filter: drop-shadow(0 0 3px rgba(76, 151, 255, 0.5)); }
+}
+
+/* Defense in depth: glow.js already skips the class under reduced-motion, but if
+ * the class is ever applied some other way, honor the OS preference here too. */
+@media (prefers-reduced-motion: reduce) {
+    .pulse { animation: none; }
+}

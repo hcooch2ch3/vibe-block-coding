@@ -7,6 +7,7 @@ import VM from 'scratch-vm';
 import VibePromptComponent from '../components/vibe-prompt/vibe-prompt.jsx';
 import {propose, applyProposal} from '../lib/ai-harness/dev-console';
 import {glowChangedBlocks} from '../lib/ai-harness/glow';
+import glowStyles from '../lib/ai-harness/glow.css';
 import VMScratchBlocks from '../lib/blocks';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
 import {loadChat, saveChat} from '../lib/ai-harness/chat-store';
@@ -377,7 +378,7 @@ class VibePrompt extends React.Component {
             const SB = VMScratchBlocks(this.props.vm, false);
             const ws = SB && SB.getMainWorkspace ? SB.getMainWorkspace() : null;
             if (this.cancelGlow) this.cancelGlow();
-            this.cancelGlow = glowChangedBlocks(ws, changedTopIds);
+            this.cancelGlow = glowChangedBlocks(ws, changedTopIds, {className: glowStyles.pulse});
         } catch (e) {
             // fail-open: animation is decoration; Apply already succeeded.
         }

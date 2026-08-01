@@ -1,29 +1,43 @@
-import {glowChangedBlocks, GLOW_MS} from '../../../src/lib/ai-harness/glow';
+import {glowChangedBlocks, GLOW_MS, GLOW_CLASS} from '../../../src/lib/ai-harness/glow';
 
-// A fake workspace faithful to the real scratch-blocks glowStack: it throws a
-// BARE STRING (not an Error) on a missing/dead id, and a falsy id hits the same
-// throw (the real API's `if(id)`-guarded null-deref path). getBlockById returns a
-// block unless the id was registered "gone".
-function fakeWorkspace (opts = {}) {
-    const gone = new Set(opts.gone || []);
-    const throwOnGlow = new Set(opts.throwOnGlow || []);
-    const calls = [];
+// A fake SVG element exposing just the classList surface glow.js uses.
+function fakeEl () {
+    const classes = new Set();
     return {
-        calls,
-        gone,
-        glowStack (id, on) {
-            if (!id || throwOnGlow.has(id)) throw 'Tried to glow stack on block that does not exist.';
-            calls.push([id, on]);
+        classList: {
+            add: c => classes.add(c),
+            remove: c => classes.delete(c),
+            contains: c => classes.has(c)
         },
+        has: c => classes.has(c)
+    };
+}
+
+// A fake workspace faithful to the scratch-blocks surface glow.js touches:
+// getBlockById(id) → BlockSvg → getSvgRoot() → SVG element. Options let a test
+// make an id missing (null block), root-less, or throw (a torn-down block).
+function fakeWorkspace (opts = {}) {
+    const missing = new Set(opts.missing || []);
+    const noRoot = new Set(opts.noRoot || []);
+    const throwOnRoot = new Set(opts.throwOnRoot || []);
+    const els = {};
+    return {
+        els,
         getBlockById (id) {
-            return gone.has(id) ? null : {id};
+            if (missing.has(id)) return null;
+            return {
+                getSvgRoot () {
+                    if (throwOnRoot.has(id)) throw new Error('block torn down');
+                    if (noRoot.has(id)) return null;
+                    if (!els[id]) els[id] = fakeEl();
+                    return els[id];
+                }
+            };
         }
     };
 }
 
-// Deterministic fake scheduler. setTimeoutFn returns a distinctive token so a test
-// can assert clearTimeoutFn received exactly that handle; scheduled() counts how
-// many timers were armed.
+// Deterministic fake scheduler.
 function fakeClock () {
     let cb = null;
     let cleared = null;
@@ -39,14 +53,26 @@ function fakeClock () {
     };
 }
 
+const CLK = () => fakeClock();
+const opts = (className, clk) => ({className, setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
+
 describe('glowChangedBlocks', () => {
-    test('glows each id on, then off after the timer', () => {
+    test('adds the glow class to each id, then removes it after the timer', () => {
         const ws = fakeWorkspace();
-        const clk = fakeClock();
-        glowChangedBlocks(ws, ['a', 'b'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
-        expect(ws.calls).toEqual([['a', true], ['b', true]]);
+        const clk = CLK();
+        glowChangedBlocks(ws, ['a', 'b'], opts('g', clk));
+        expect(ws.els.a.has('g')).toBe(true);
+        expect(ws.els.b.has('g')).toBe(true);
         clk.tick();
-        expect(ws.calls).toEqual([['a', true], ['b', true], ['a', false], ['b', false]]);
+        expect(ws.els.a.has('g')).toBe(false);
+        expect(ws.els.b.has('g')).toBe(false);
+    });
+
+    test('uses GLOW_CLASS by default when no className is given', () => {
+        const ws = fakeWorkspace();
+        const clk = CLK();
+        glowChangedBlocks(ws, ['a'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
+        expect(ws.els.a.has(GLOW_CLASS)).toBe(true);
     });
 
     test('no workspace → no throw, cancel is safe', () => {
@@ -58,81 +84,69 @@ describe('glowChangedBlocks', () => {
     test('empty ids → nothing glows', () => {
         const ws = fakeWorkspace();
         glowChangedBlocks(ws, [], {});
-        expect(ws.calls).toEqual([]);
+        expect(Object.keys(ws.els)).toEqual([]);
     });
 
     test('a non-array topIds → no throw, nothing glows (never-throw contract)', () => {
         const ws = fakeWorkspace();
-        const clk = fakeClock();
-        // a number has no .length===0 and is not iterable — must be normalized away,
-        // not run into the for..of.
+        const clk = CLK();
         expect(() => glowChangedBlocks(ws, 5, {setTimeoutFn: clk.setTimeoutFn})).not.toThrow();
         expect(() => glowChangedBlocks(ws, null, {setTimeoutFn: clk.setTimeoutFn})).not.toThrow();
-        expect(ws.calls).toEqual([]);
+        expect(Object.keys(ws.els)).toEqual([]);
         expect(clk.scheduled()).toBe(0);
     });
 
     test('reducedMotion → nothing glows', () => {
         const ws = fakeWorkspace();
         glowChangedBlocks(ws, ['a'], {reducedMotion: true});
-        expect(ws.calls).toEqual([]);
+        expect(Object.keys(ws.els)).toEqual([]);
     });
 
-    test('a throwing id is skipped, others still glow (fail-open)', () => {
-        const ws = fakeWorkspace({throwOnGlow: ['bad']});
-        const clk = fakeClock();
-        glowChangedBlocks(ws, ['bad', 'good'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
-        expect(ws.calls).toEqual([['good', true]]);
-        clk.tick();
-        expect(ws.calls).toEqual([['good', true], ['good', false]]);
+    test('a missing block (getBlockById → null) is skipped, others still glow', () => {
+        const ws = fakeWorkspace({missing: ['gone']});
+        const clk = CLK();
+        glowChangedBlocks(ws, ['gone', 'good'], opts('g', clk));
+        expect(ws.els.good.has('g')).toBe(true);
+        expect(ws.els.gone).toBeUndefined();
     });
 
-    test('a falsy id (real null-deref path) is skipped, no throw', () => {
+    test('a block whose getSvgRoot throws is skipped (fail-open), others glow', () => {
+        const ws = fakeWorkspace({throwOnRoot: ['bad']});
+        const clk = CLK();
+        expect(() => glowChangedBlocks(ws, ['bad', 'good'], opts('g', clk))).not.toThrow();
+        expect(ws.els.good.has('g')).toBe(true);
+    });
+
+    test('when no id yields a root, no un-glow timer is armed', () => {
+        const ws = fakeWorkspace({noRoot: ['x', 'y']});
+        const clk = CLK();
+        glowChangedBlocks(ws, ['x', 'y'], opts('g', clk));
+        expect(clk.scheduled()).toBe(0); // glowed.length === 0 → early return, no timer
+    });
+
+    test('cancel() clears the exact stored timer handle AND removes the glow class', () => {
         const ws = fakeWorkspace();
-        const clk = fakeClock();
-        expect(() =>
-            glowChangedBlocks(ws, ['', 'good'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn})
-        ).not.toThrow();
-        expect(ws.calls).toEqual([['good', true]]);
-    });
-
-    test('when every id throws, no un-glow timer is armed', () => {
-        const ws = fakeWorkspace({throwOnGlow: ['x', 'y']});
-        const clk = fakeClock();
-        glowChangedBlocks(ws, ['x', 'y'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
-        expect(ws.calls).toEqual([]);
-        expect(clk.scheduled()).toBe(0); // glowing.length === 0 → early return, no timer
-    });
-
-    test('un-glow skips ids whose block disappeared before the timer', () => {
-        const ws = fakeWorkspace({gone: ['a']});
-        const clk = fakeClock();
-        glowChangedBlocks(ws, ['a'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
-        expect(ws.calls).toEqual([['a', true]]); // glow ON recorded (getBlockById only gates OFF)
-        clk.tick();
-        expect(ws.calls).toEqual([['a', true]]); // OFF skipped because getBlockById → null
-    });
-
-    test('cancel() clears the exact stored timer handle AND un-glows so no glow is stranded', () => {
-        const ws = fakeWorkspace();
-        const clk = fakeClock();
-        const cancel = glowChangedBlocks(ws, ['a'], {setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
+        const clk = CLK();
+        const cancel = glowChangedBlocks(ws, ['a'], opts('g', clk));
+        expect(ws.els.a.has('g')).toBe(true);
         cancel();
-        expect(clk.cleared()).toBe('timer-token'); // the exact handle setTimeoutFn returned, threaded through
-        expect(ws.calls).toEqual([['a', true], ['a', false]]); // cancel turns the glow OFF, not just drops the timer
-        clk.tick(); // timer already cleared → no double un-glow
-        expect(ws.calls).toEqual([['a', true], ['a', false]]);
+        expect(clk.cleared()).toBe('timer-token'); // the exact handle setTimeoutFn returned
+        expect(ws.els.a.has('g')).toBe(false); // cancel removes the class, not just drops the timer
+        clk.tick(); // timer already cleared → no double work
+        expect(ws.els.a.has('g')).toBe(false);
     });
 
     test('a custom glowMs is passed through to the scheduler', () => {
         const ws = fakeWorkspace();
-        const clk = fakeClock();
-        glowChangedBlocks(ws, ['a'], {glowMs: 400, setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
+        const clk = CLK();
+        glowChangedBlocks(ws, ['a'], {glowMs: 400, className: 'g', setTimeoutFn: clk.setTimeoutFn, clearTimeoutFn: clk.clearTimeoutFn});
         expect(clk.lastDelay()).toBe(400);
     });
 
-    test('exports a default glow duration', () => {
+    test('exports a default glow duration and class name', () => {
         expect(typeof GLOW_MS).toBe('number');
         expect(GLOW_MS).toBeGreaterThan(0);
+        expect(typeof GLOW_CLASS).toBe('string');
+        expect(GLOW_CLASS.length).toBeGreaterThan(0);
     });
 });
