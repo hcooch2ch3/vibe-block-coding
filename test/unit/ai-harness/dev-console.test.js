@@ -77,4 +77,27 @@ describe('measureBuildRate', () => {
         expect(out.produced).toBe(1);
         expect(out.rate).toBeCloseTo(0.5);
     });
+
+    test('measureBuildRate rejects a non-array prompts (browser-console footgun guard)', async () => {
+        let err;
+        try {
+            await measureBuildRate(fakeVm(), {apiKey: 'k', prompts: 'walk'});
+        } catch (e) {
+            err = e;
+        }
+        expect(err).toBeInstanceOf(TypeError);
+        expect(err.message).toMatch('measureBuildRate: prompts must be an array');
+    });
+
+    test('measureBuildRate counts a thrown turn as not produced', async () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const fetchImpl = jest.fn()
+            .mockImplementationOnce(() => envelope('ok', [{hat: 'when_clicked', body: [['move', 10]]}]))
+            .mockImplementationOnce(() => Promise.reject(new Error('network')));
+        const out = await measureBuildRate(fakeVm(), {apiKey: 'k', prompts: ['walk', 'boom']}, fetchImpl);
+        expect(out.total).toBe(2);
+        expect(out.produced).toBe(1);
+        expect(out.rate).toBeCloseTo(0.5);
+        warnSpy.mockRestore();
+    });
 });

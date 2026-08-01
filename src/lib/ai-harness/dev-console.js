@@ -66,12 +66,16 @@ export const edit = async function (vm, opts, fetchImpl) {
  * @returns {Promise<{total:number, produced:number, rate:number}>}
  */
 export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fetchImpl) {
+    if (!Array.isArray(prompts)) throw new TypeError('measureBuildRate: prompts must be an array');
     let produced = 0;
     for (const instruction of prompts) {
         try {
             const out = await requestTurn({apiKey, model, instruction}, fetchImpl);
             if (out.blocks && out.blocks.length) produced++;
-        } catch (e) { /* count as not produced */ }
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[vibe.measure] prompt failed:', instruction, e.message);
+        }
     }
     return {total: prompts.length, produced, rate: prompts.length ? produced / prompts.length : 0};
 };
