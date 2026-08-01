@@ -48,21 +48,21 @@ export const buildSystemPrompt = function () {
 /**
  * 사용자 프롬프트 조립. currentScripts 가 있으면 편집(현재 프로그램 동봉), 없으면 생성.
  * Optional history is prepended as recent conversation context (text only, no block payloads).
- * @param {object} opts - {instruction, currentScripts?, history?}
- * @param {Array<{role:'user'|'ai', text: string}>} [opts.history] - recent turns, oldest first
+ * @param {object} opts - object with instruction string, optional currentScripts array, and optional history array
+ * @param {Array} [opts.history] - recent turns oldest first, each with role and text fields
  * @returns {string} 사용자 메시지 본문
  */
 export const buildUserPrompt = function (opts) {
     const {instruction, currentScripts, history} = opts;
 
     // Prepend recent conversation history as inline context (text only, no DSL payloads).
-    const historyLines = (history && history.length)
-        ? [
+    const historyLines = (history && history.length) ?
+        [
             'Recent conversation:',
             ...history.map(turn => `${turn.role === 'ai' ? 'AI' : 'User'}: ${turn.text}`),
             ''
-        ]
-        : [];
+        ] :
+        [];
 
     if (currentScripts && currentScripts.length) {
         return [
@@ -153,7 +153,7 @@ export const parseDSL = function (text) {
  * dropped, rather than throwing.
  *
  * @param {string} text - raw model reply
- * @returns {{answer?: string, blocks?: Array<object>}}
+ * @returns {object} object with optional answer string and optional validated blocks array
  */
 export const parseEnvelope = function (text) {
     let obj;
@@ -205,16 +205,14 @@ export const parseEnvelope = function (text) {
                         inString = false;
                         stringStart = -1;
                     }
-                } else {
-                    if (ch === '"') {
-                        inString = true;
-                        escaped = false;
-                        stringStart = i;
-                    } else if (ch === '{' || ch === '[') {
-                        depth++;
-                    } else if (ch === '}' || ch === ']') {
-                        depth--;
-                    }
+                } else if (ch === '"') {
+                    inString = true;
+                    escaped = false;
+                    stringStart = i;
+                } else if (ch === '{' || ch === '[') {
+                    depth++;
+                } else if (ch === '}' || ch === ']') {
+                    depth--;
                 }
             }
             return null;
@@ -227,8 +225,9 @@ export const parseEnvelope = function (text) {
     // Lift into blocks exactly like the object path — fail-closed on invalid or empty.
     if (Array.isArray(obj)) {
         if (obj.length) {
-            try { out.blocks = validateScripts(obj); }
-            catch (e) { /* fail-closed: drop invalid blocks */ }
+            try {
+                out.blocks = validateScripts(obj);
+            } catch (e) { /* fail-closed: drop invalid blocks */ }
         }
         return out;
     }
@@ -248,8 +247,11 @@ export const ENVELOPE_MAX_TOKENS = 2048;
 // legacy requestScripts/parseDSL path (Task 0 measure, window.vibe.smoke) still
 // gets an array and does not break.
 export const buildEnvelopeSystemPrompt = function () {
-    const vocab = buildSystemPrompt().split('\n')
-        .filter(l => !l.startsWith('Reply with ONLY') && !l.startsWith('{"hat"') && !l.startsWith('Use only the steps'));
+    const vocab = buildSystemPrompt()
+        .split('\n')
+        .filter(l => !l.startsWith('Reply with ONLY') &&
+            !l.startsWith('{"hat"') &&
+            !l.startsWith('Use only the steps'));
     return [
         ...vocab,
         '',
@@ -266,9 +268,9 @@ export const buildEnvelopeSystemPrompt = function () {
  * {answer?, blocks?} envelope. Uses buildEnvelopeSystemPrompt so the model
  * emits structured JSON rather than a bare DSL array. Supports optional history
  * context passed through to buildUserPrompt.
- * @param {object} config - {apiKey, model?, instruction, currentScripts?, history?}
+ * @param {object} config - object with apiKey, instruction, and optional model, currentScripts, history
  * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
- * @returns {Promise<{answer?: string, blocks?: Array<object>}>}
+ * @returns {Promise<object>} parsed envelope with optional answer string and optional blocks array
  */
 export const requestTurn = async function (config, fetchImpl) {
     const {apiKey, model, instruction, currentScripts, history} = config;

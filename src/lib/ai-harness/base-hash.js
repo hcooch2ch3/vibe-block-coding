@@ -23,7 +23,7 @@ export const hashProgram = function (scripts) {
  * @param {object} vm - scratch-vm instance
  * @param {string} targetId - id of the target to check
  * @param {string} baseHash - hash produced by hashProgram() at propose time
- * @returns {boolean}
+ * @returns {boolean} true if live target hash matches baseHash, false if stale or target missing
  */
 export const targetMatchesBase = function (vm, targetId, baseHash) {
     const target = vm.runtime.getTargetById(targetId);
