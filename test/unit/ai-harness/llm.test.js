@@ -3,6 +3,7 @@ import {
     buildSystemPrompt,
     buildUserPrompt,
     parseDSL,
+    parseEnvelope,
     requestScripts
 } from '../../../src/lib/ai-harness/llm';
 
@@ -157,5 +158,35 @@ describe('parseDSL substack validation', () => {
     });
     test('rejects a non-array step', () => {
         expect(() => parseDSL(wrap([{hat: 'when_flag', body: [5]}]))).toThrow();
+    });
+});
+
+describe('parseEnvelope', () => {
+    test('answer only', () => {
+        const out = parseEnvelope('{"answer":"Use the move block!"}');
+        expect(out.answer).toBe('Use the move block!');
+        expect(out.blocks).toBeUndefined();
+    });
+    test('answer + valid blocks', () => {
+        const out = parseEnvelope('{"answer":"ok","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
+        expect(out.answer).toBe('ok');
+        expect(out.blocks).toHaveLength(1);
+    });
+    test('malformed blocks keeps answer, drops blocks (fail-closed)', () => {
+        const out = parseEnvelope('{"answer":"tried","blocks":[{"hat":"nope","body":[]}]}');
+        expect(out.answer).toBe('tried');
+        expect(out.blocks).toBeUndefined();
+    });
+    test('empty blocks array is not a silent success', () => {
+        const out = parseEnvelope('{"answer":"hmm","blocks":[]}');
+        expect(out.blocks).toBeUndefined(); // empty → treated as no blocks
+    });
+    test('unparseable → throws (caller shows retry nudge)', () => {
+        expect(() => parseEnvelope('not json at all %%%')).toThrow();
+    });
+    test('truncated mid-JSON keeps the leading answer, drops blocks', () => {
+        const out = parseEnvelope('{"answer":"Here you go!","blocks":[{"hat":"when_clicked","body":[["mov');
+        expect(out.answer).toBe('Here you go!');
+        expect(out.blocks).toBeUndefined();
     });
 });

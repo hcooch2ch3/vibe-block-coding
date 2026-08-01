@@ -77,13 +77,13 @@ const sliceJSON = function (text) {
 };
 
 /**
- * 모델 텍스트에서 DSL 스크립트 배열을 추출하고 지원 opcode 인지 검증한다.
- * @param {string} text - 모델이 돌려준 원문
- * @returns {Array<object>} {hat, body} DSL 스크립트 배열
+ * Validate an array of DSL scripts against OPMAP. Throws on the first
+ * structural or vocabulary error. Returns the same scripts array on success.
+ * Extracted from parseDSL so parseEnvelope can share the same validation path.
+ * @param {Array<object>} scripts - [{hat, body}, ...]
+ * @returns {Array<object>} the same scripts array (validated)
  */
-export const parseDSL = function (text) {
-    const parsed = JSON.parse(sliceJSON(text));
-    const scripts = Array.isArray(parsed) ? parsed : [parsed];
+export const validateScripts = function (scripts) {
     const validateStep = function validate (step, isLast) {
         if (!Array.isArray(step)) throw new Error('스텝은 배열이어야 합니다');
         const [op, ...args] = step;
@@ -118,6 +118,53 @@ export const parseDSL = function (text) {
         body.forEach((step, i) => validateStep(step, i === body.length - 1));
     });
     return scripts;
+};
+
+/**
+ * Extract and validate DSL scripts from raw model text.
+ * @param {string} text - raw model reply
+ * @returns {Array<object>} {hat, body} DSL script array
+ */
+export const parseDSL = function (text) {
+    const parsed = JSON.parse(sliceJSON(text));
+    return validateScripts(Array.isArray(parsed) ? parsed : [parsed]);
+};
+
+/**
+ * Parse the unified-chat envelope. `answer` is free text; `blocks` (optional)
+ * is validated through validateScripts. Independent-field fail-closed: invalid
+ * or empty blocks are dropped WITHOUT discarding a valid answer.
+ *
+ * Handles the max_tokens truncation path: a reply cut mid-JSON that still has
+ * a complete leading "answer" field will have the answer salvaged and blocks
+ * dropped, rather than throwing.
+ *
+ * @param {string} text - raw model reply
+ * @returns {{answer?: string, blocks?: Array<object>}}
+ */
+export const parseEnvelope = function (text) {
+    let obj;
+    try {
+        obj = JSON.parse(sliceJSON(text));
+    } catch (e) {
+        // Truncated mid-JSON (the max_tokens path): the whole object won't parse,
+        // but a complete leading "answer" field usually survives. Salvage it and
+        // drop blocks. If not even an answer is present, rethrow so the caller
+        // shows the retry nudge.
+        const m = text.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (m) {
+            try { return {answer: JSON.parse(`"${m[1]}"`)}; } catch (e2) { /* fall through */ }
+        }
+        throw e;
+    }
+    const out = {};
+    if (obj && typeof obj.answer === 'string' && obj.answer.trim()) out.answer = obj.answer;
+    if (obj && Array.isArray(obj.blocks) && obj.blocks.length) {
+        try {
+            out.blocks = validateScripts(obj.blocks);
+        } catch (e) { /* fail-closed: keep answer, drop blocks */ }
+    }
+    return out;
 };
 
 /**
