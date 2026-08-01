@@ -93,7 +93,7 @@ const messages = defineMessages({
     },
     title: {
         id: 'vibe.prompt.title',
-        defaultMessage: 'Make it with words',
+        defaultMessage: 'Vibe Block Coding',
         description: 'Title shown in the floating AI card header'
     },
     collapse: {
