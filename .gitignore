@@ -27,3 +27,6 @@ npm-*
 # for act
 .secrets
 .omc/
+
+# Local AI working notes (private — not part of the public fork)
+.claude/
