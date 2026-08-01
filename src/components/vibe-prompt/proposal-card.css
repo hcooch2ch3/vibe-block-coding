@@ -72,3 +72,19 @@
     background: #fafafa;
     border-bottom: 1px solid #eeeeee;
 }
+
+.applied {
+    color: #3a8a3a;
+    font-weight: 600;
+}
+
+.ignored {
+    color: #aaaaaa;
+    font-style: italic;
+}
+
+.staleLabel {
+    font-size: 0.8rem;
+    color: #999999;
+    font-style: italic;
+}

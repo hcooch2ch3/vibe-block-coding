@@ -24,7 +24,7 @@ const messages = defineMessages({
 
 // Stateless. Header (status label + the right buttons for `status`) then one
 // BlockPreview per script. Named export for shallow tests; default is intl-wrapped.
-const ProposalCard = function ({status, scripts, explanation, onApply, onIgnore, onRebuild, intl}) {
+const ProposalCard = function ({status, scripts, explanation, onApply, onIgnore, onRebuild, vm, intl}) {
     return (
         <div className={classNames('proposal-card', styles.card)}>
             <div className={classNames('proposal-card__header', styles.header)}>
@@ -47,19 +47,28 @@ const ProposalCard = function ({status, scripts, explanation, onApply, onIgnore,
                     </React.Fragment>
                 )}
                 {status === 'stale' && (
-                    <button
-                        className={classNames('proposal-card__rebuild', styles.rebuild)}
-                        type="button"
-                        onClick={onRebuild}
-                    >
-                        {intl.formatMessage(messages.rebuild)}
-                    </button>
+                    <React.Fragment>
+                        <span className={classNames('proposal-card__stale-label', styles.staleLabel)}>
+                            {intl.formatMessage(messages.stale)}
+                        </span>
+                        <button
+                            className={classNames('proposal-card__rebuild', styles.rebuild)}
+                            type="button"
+                            onClick={onRebuild}
+                        >
+                            {intl.formatMessage(messages.rebuild)}
+                        </button>
+                    </React.Fragment>
                 )}
                 {status === 'applied' && (
-                    <span className="proposal-card__applied">{intl.formatMessage(messages.applied)}</span>
+                    <span className={classNames('proposal-card__applied', styles.applied)}>
+                        {intl.formatMessage(messages.applied)}
+                    </span>
                 )}
                 {status === 'ignored' && (
-                    <span className="proposal-card__ignored">{intl.formatMessage(messages.ignored)}</span>
+                    <span className={classNames('proposal-card__ignored', styles.ignored)}>
+                        {intl.formatMessage(messages.ignored)}
+                    </span>
                 )}
             </div>
             {explanation ? (
@@ -70,11 +79,14 @@ const ProposalCard = function ({status, scripts, explanation, onApply, onIgnore,
                     key={i}
                     script={s}
                     variant="added"
+                    vm={vm}
                 />
             ))}
         </div>
     );
 };
+
+const noop = function () {};
 
 ProposalCard.propTypes = {
     explanation: PropTypes.string,
@@ -82,9 +94,12 @@ ProposalCard.propTypes = {
     onApply: PropTypes.func,
     onIgnore: PropTypes.func,
     onRebuild: PropTypes.func,
-    scripts: PropTypes.array.isRequired,
-    status: PropTypes.oneOf(['pending', 'stale', 'applied', 'ignored']).isRequired
+    scripts: PropTypes.arrayOf(PropTypes.shape({hat: PropTypes.string, body: PropTypes.array})).isRequired,
+    status: PropTypes.oneOf(['pending', 'stale', 'applied', 'ignored']).isRequired,
+    vm: PropTypes.object
 };
+
+ProposalCard.defaultProps = {onApply: noop, onIgnore: noop, onRebuild: noop};
 
 export {ProposalCard};
 export default injectIntl(ProposalCard);
