@@ -147,6 +147,23 @@ describe('VibePrompt container', () => {
             expect(applySpy).toHaveBeenCalledTimes(1);
         });
 
+        test('M2 BUSY-LOCK: submit/runProposeFor is blocked while handleApply is in flight', async () => {
+            const vm = makeVm({});
+            // applyProposal never resolves — handleApply stays in flight
+            jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => new Promise(function () {}));
+            const proposeSpy = jest.spyOn(devConsole, 'propose')
+                .mockImplementation(() => Promise.resolve({answer: 'ok'}));
+            const wrapper = render(vm);
+            const turn = {id: 11, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn]});
+            wrapper.instance().handleApply(turn); // starts apply, sets busy=true
+            // runProposeFor checks this.state.busy — should be blocked
+            wrapper.instance().runProposeFor('walk', 'sprite-a');
+            await flushPromises();
+            expect(proposeSpy).not.toHaveBeenCalled();
+        });
+
         test('handleApply on a turn without a preview is a no-op', () => {
             const vm = makeVm({});
             const applySpy = jest.spyOn(devConsole, 'applyProposal')
@@ -173,6 +190,8 @@ describe('VibePrompt container', () => {
             const vm = makeVm({});
             const proposeSpy = jest.spyOn(devConsole, 'propose')
                 .mockImplementation(() => Promise.resolve({answer: '', proposal: makeProposal()}));
+            const applyProposalSpy = jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true}));
             const wrapper = render(vm);
             const stale = {
                 id: 9, role: 'ai', kind: 'proposal', status: 'stale',
@@ -186,12 +205,15 @@ describe('VibePrompt container', () => {
             expect(turns[0].status).toBe('stale'); // original untouched
             expect(turns[1]).toMatchObject({role: 'ai', kind: 'proposal', status: 'pending'});
             expect(proposeSpy.mock.calls[0][1]).toMatchObject({instruction: 'walk', targetId: 'sprite-a'});
+            expect(applyProposalSpy).not.toHaveBeenCalled();
         });
 
         test('handleMakeIt on an answer turn appends a new pending proposal', async () => {
             const vm = makeVm({});
             jest.spyOn(devConsole, 'propose')
                 .mockImplementation(() => Promise.resolve({answer: '', proposal: makeProposal()}));
+            const applyProposalSpy = jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true}));
             const wrapper = render(vm);
             const answer = {id: 10, role: 'ai', kind: 'answer', text: 'you could...',
                 instruction: 'make a game', targetId: 'sprite-a'};
@@ -202,6 +224,7 @@ describe('VibePrompt container', () => {
             expect(turns).toHaveLength(2);
             expect(turns[0]).toMatchObject({kind: 'answer'}); // original untouched
             expect(turns[1]).toMatchObject({kind: 'proposal', status: 'pending'});
+            expect(applyProposalSpy).not.toHaveBeenCalled();
         });
     });
 

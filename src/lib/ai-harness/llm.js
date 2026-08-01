@@ -17,6 +17,45 @@ import {OPMAP} from './dsl';
 
 export const DEFAULT_MODEL = 'claude-haiku-4-5';
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+export const REQUEST_TIMEOUT_MS = 45000;
+
+/**
+ * Wraps doFetch with a timeout that rejects the returned promise after
+ * timeoutMs milliseconds. When the browser's AbortController is available
+ * (window.AbortController), the in-flight fetch is also aborted so the
+ * connection is torn down; in environments where AbortController is absent
+ * (Jest 21 + jsdom) the fetch continues in the background but the caller
+ * receives the timeout rejection and can proceed. clearTimeout fires in the
+ * finally block on every path to prevent timer leaks.
+ * @param {Function} doFetch - fetch implementation (real or injected)
+ * @param {string} url - request URL
+ * @param {object} options - fetch options (signal added when AbortController is available)
+ * @param {number} timeoutMs - milliseconds before the timeout rejection fires
+ * @returns {Promise<Response>} the fetch response
+ */
+const fetchWithTimeout = async function (doFetch, url, options, timeoutMs) {
+    // AbortController is a browser global. Jest 21 + jsdom omits it from the
+    // sandbox window, so feature-detect via window rather than a bare reference.
+    const Ctor = (typeof window !== 'undefined' && window.AbortController) || null;
+    const controller = Ctor ? new Ctor() : null;
+    const opts = controller ?
+        Object.assign({}, options, {signal: controller.signal}) :
+        options;
+    let timer;
+    try {
+        return await Promise.race([
+            doFetch(url, opts),
+            new Promise((resolve, reject) => {
+                timer = setTimeout(() => {
+                    if (controller) controller.abort();
+                    reject(new Error('LLM 호출 시간 초과'));
+                }, timeoutMs);
+            })
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
 
 /**
  * 지원 DSL 어휘를 OPMAP 에서 뽑아 모델에게 규칙을 설명하는 시스템 프롬프트.
@@ -273,9 +312,10 @@ export const buildEnvelopeSystemPrompt = function () {
  * @returns {Promise<object>} parsed envelope with optional answer string and optional blocks array
  */
 export const requestTurn = async function (config, fetchImpl) {
-    const {apiKey, model, instruction, currentScripts, history} = config;
+    const {apiKey, model, instruction, currentScripts, history,
+        timeoutMs = REQUEST_TIMEOUT_MS} = config;
     const doFetch = fetchImpl || fetch;
-    const res = await doFetch(ANTHROPIC_URL, {
+    const res = await fetchWithTimeout(doFetch, ANTHROPIC_URL, {
         method: 'POST',
         headers: {
             'x-api-key': apiKey,
@@ -289,7 +329,7 @@ export const requestTurn = async function (config, fetchImpl) {
             system: buildEnvelopeSystemPrompt(),
             messages: [{role: 'user', content: buildUserPrompt({instruction, currentScripts, history})}]
         })
-    });
+    }, timeoutMs);
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const msg = (err.error && err.error.message) || `HTTP ${res.status}`;
@@ -307,9 +347,10 @@ export const requestTurn = async function (config, fetchImpl) {
  * @returns {Promise<Array<object>>} DSL 스크립트 배열
  */
 export const requestScripts = async function (config, fetchImpl) {
-    const {apiKey, model, instruction, currentScripts} = config;
+    const {apiKey, model, instruction, currentScripts,
+        timeoutMs = REQUEST_TIMEOUT_MS} = config;
     const doFetch = fetchImpl || fetch;
-    const res = await doFetch(ANTHROPIC_URL, {
+    const res = await fetchWithTimeout(doFetch, ANTHROPIC_URL, {
         method: 'POST',
         headers: {
             'x-api-key': apiKey,
@@ -323,7 +364,7 @@ export const requestScripts = async function (config, fetchImpl) {
             system: buildSystemPrompt(),
             messages: [{role: 'user', content: buildUserPrompt({instruction, currentScripts})}]
         })
-    });
+    }, timeoutMs);
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const msg = (err.error && err.error.message) || `HTTP ${res.status}`;

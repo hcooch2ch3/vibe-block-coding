@@ -327,6 +327,7 @@ class VibePrompt extends React.Component {
         // button must not double-inject).
         if (this.applying || !turn || !turn.preview) return;
         this.applying = true;
+        this.setState({busy: true});
         const vm = this.props.vm;
         Promise.resolve()
             .then(() => applyProposal(vm, turn.preview))
@@ -340,9 +341,10 @@ class VibePrompt extends React.Component {
                 console.error('[vibe] apply failed:', err);
                 this.setTurnStatus(turn.id, 'stale');
             })
-            // Clear the single-flight flag on BOTH success and reject.
+            // Clear the single-flight flag and busy on BOTH success and reject.
             .then(() => {
                 this.applying = false;
+                this.setState({busy: false});
             });
     }
     handleIgnore (turn) {

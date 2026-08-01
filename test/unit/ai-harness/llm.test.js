@@ -7,7 +7,8 @@ import {
     parseEnvelope,
     requestScripts,
     requestTurn,
-    ENVELOPE_MAX_TOKENS
+    ENVELOPE_MAX_TOKENS,
+    REQUEST_TIMEOUT_MS
 } from '../../../src/lib/ai-harness/llm';
 
 const flag = body => ({hat: 'when_flag', body});
@@ -244,6 +245,30 @@ describe('requestTurn (fetch injected)', () => {
         expect(out.blocks).toHaveLength(1);
         const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
         expect(body.max_tokens).toBe(ENVELOPE_MAX_TOKENS);
+    });
+    test('REQUEST_TIMEOUT_MS is exported and is a positive number', () => {
+        expect(typeof REQUEST_TIMEOUT_MS).toBe('number');
+        expect(REQUEST_TIMEOUT_MS).toBeGreaterThan(0);
+    });
+    test('requestTurn rejects with a timeout error when fetch never resolves (M1)', async () => {
+        const hangingFetch = function () { return new Promise(function () {}); };
+        let threw = false;
+        try {
+            await requestTurn({apiKey: 'k', instruction: 'x', timeoutMs: 5}, hangingFetch);
+        } catch (e) {
+            threw = true;
+        }
+        expect(threw).toBe(true);
+    });
+    test('requestScripts rejects with a timeout error when fetch never resolves (M1)', async () => {
+        const hangingFetch = function () { return new Promise(function () {}); };
+        let threw = false;
+        try {
+            await requestScripts({apiKey: 'k', instruction: 'x', timeoutMs: 5}, hangingFetch);
+        } catch (e) {
+            threw = true;
+        }
+        expect(threw).toBe(true);
     });
 });
 
