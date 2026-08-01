@@ -11,6 +11,7 @@ import {decompile} from './dsl';
  * @returns {string} stable canonical hash string
  */
 export const hashProgram = function (scripts) {
+    if (!Array.isArray(scripts)) throw new TypeError('hashProgram: expected a decompiled scripts array');
     return JSON.stringify(scripts);
 };
 
@@ -27,5 +28,10 @@ export const hashProgram = function (scripts) {
 export const targetMatchesBase = function (vm, targetId, baseHash) {
     const target = vm.runtime.getTargetById(targetId);
     if (!target) return false;
-    return hashProgram(decompile(target.blocks)) === baseHash;
+    try {
+        return hashProgram(decompile(target.blocks)) === baseHash;
+    } catch (e) {
+        // Unknown opcode / corrupt blocks → treat as edited → stale → Rebuild (fail-closed).
+        return false;
+    }
 };
