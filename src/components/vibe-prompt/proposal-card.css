@@ -1,0 +1,74 @@
+/* ProposalCard — header bar + action buttons */
+
+.card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    background: #ffffff;
+}
+
+.header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+
+.apply {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    background: #4c97ff;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.apply:hover {
+    background: #3373cc;
+}
+
+.ignore {
+    padding: 4px 14px;
+    border: 1px solid #aaaaaa;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #555555;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.ignore:hover {
+    background: #f0f0f0;
+}
+
+.rebuild {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    background: #ffab19;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.rebuild:hover {
+    background: #cc8800;
+}
+
+.explanation {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    color: #666666;
+    background: #fafafa;
+    border-bottom: 1px solid #eeeeee;
+}
