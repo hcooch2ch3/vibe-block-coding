@@ -10,7 +10,7 @@
 
 import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
 import {compile, decompile, scriptHatIds} from './dsl';
-import {applyEdit} from './edit';
+import {applyEdit, applyOps, editsToOps} from './edit';
 import {hashProgram, targetMatchesBase} from './base-hash';
 
 /**
@@ -72,7 +72,7 @@ export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fe
     for (const instruction of prompts) {
         try {
             const out = await requestTurn({apiKey, model, instruction}, fetchImpl);
-            if (out.blocks && out.blocks.length) produced++;
+            if (out.edits && out.edits.length) produced++;
         } catch (e) {
             // eslint-disable-next-line no-console
             console.warn('[vibe.measure] prompt failed:', instruction, e.message);
@@ -84,12 +84,12 @@ export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fe
 /**
  * Compile the current target's program and ask the LLM to respond — but do NOT
  * mutate the workspace. Returns {answer} on a text-only reply, or
- * {answer, proposal} when the model returns blocks. The proposal carries a
- * baseStamp so applyProposal can detect stale edits before injecting.
+ * {answer, proposal} when the model returns applicable edits. The proposal
+ * carries a baseStamp so applyProposal can detect stale edits before injecting.
  *
- * generate vs edit is chosen by whether the target is currently empty:
- *   - empty  → kind:'generate', blocks from LLM
- *   - non-empty → kind:'edit', oldScripts/newScripts from LLM
+ * The model returns id+find edits (add/modify/remove); editsToOps resolves them
+ * to ops against `current`, dropping any whose find does not match the targeted
+ * script (fail-closed). An empty program just yields add ops. No valid ops → {answer}.
  *
  * @param {VirtualMachine} vm - scratch-vm instance
  * @param {object} opts - {apiKey, instruction, model?, targetId, history?}
@@ -108,13 +108,13 @@ export const propose = async function (vm, opts, fetchImpl) {
         history: opts.history
     };
     if (!isEmpty) cfg.currentScripts = current;
-    const {answer, blocks} = await requestTurn(cfg, fetchImpl);
-    if (!blocks) return {answer};
+    const {answer, edits} = await requestTurn(cfg, fetchImpl);
+    // editsToOps drops any modify/remove whose find != scriptFingerprint(current[id-1]),
+    // so a wrong id becomes a no-op instead of a destructive edit. No valid ops → answer only.
+    const ops = editsToOps(edits || [], current);
+    if (!ops.length) return {answer};
     const baseStamp = {targetId: opts.targetId, baseHash: hashProgram(current)};
-    const proposal = isEmpty ?
-        {kind: 'generate', blocks, baseStamp} :
-        {kind: 'edit', oldScripts: current, newScripts: blocks, baseStamp};
-    return {answer, proposal};
+    return {answer, proposal: {kind: 'edit', baseStamp, ops}};
 };
 
 /**
@@ -126,22 +126,24 @@ export const propose = async function (vm, opts, fetchImpl) {
  * threads at Apply, not at propose, so we don't interrupt a running project just
  * because the user clicked Preview).
  *
- * NON-ATOMIC for kind:'edit': applyEdit deletes then re-injects blocks with no
+ * NON-ATOMIC: applyOps deletes then re-injects the changed scripts with no
  * rollback. A rejection mid-apply may leave the workspace partially edited; the
  * caller MUST treat a thrown error as "workspace possibly dirty → Rebuild", not
  * a no-op.
  *
  * @param {VirtualMachine} vm - scratch-vm instance
- * @param {object} proposal - {kind, blocks|oldScripts+newScripts, baseStamp}
+ * @param {object} proposal - {kind:'edit', baseStamp, ops}
  * @returns {Promise<object>} {ok:false, stale:true} when stale; otherwise
  *   {ok:true, changedTopIds} where changedTopIds are the vm hat ids this apply
  *   added or replaced (empty for a keep-only edit) — for the canvas glow.
  */
 export const applyProposal = async function (vm, proposal) {
     const {targetId, baseHash} = proposal.baseStamp;
+    // Fail-closed for a proposal persisted before this upgrade (has no ops).
+    if (!Array.isArray(proposal.ops)) return {ok: false, stale: true};
     if (!targetMatchesBase(vm, targetId, baseHash)) return {ok: false, stale: true};
     // misc(a): stop threads ONLY here, at Apply — propose must not touch the running
-    // project. applyEdit's deleteBlock can orphan a running script otherwise.
+    // project. applyOps' deleteBlock can orphan a running script otherwise.
     vm.stopAll();
     // Recover the REAL post-injection hat ids. shareBlocksToTarget runs newBlockIds
     // on a deep clone, so compile-time ids are discarded — the only ids that reach
@@ -149,14 +151,7 @@ export const applyProposal = async function (vm, proposal) {
     // are present after but not before; kept hats keep their id; removed hats vanish.
     const target = vm.runtime.getTargetById(targetId);
     const before = new Set(scriptHatIds(target.blocks));
-    if (proposal.kind === 'generate') {
-        await vm.shareBlocksToTarget(compile(proposal.blocks), targetId);
-        vm.refreshWorkspace();
-    } else if (proposal.kind === 'edit') {
-        await applyEdit(vm, proposal.oldScripts, proposal.newScripts, targetId);
-    } else {
-        throw new Error(`applyProposal: unknown proposal kind: ${proposal.kind}`);
-    }
+    await applyOps(vm, proposal.ops, targetId);
     const changedTopIds = scriptHatIds(target.blocks).filter(id => !before.has(id));
     return {ok: true, changedTopIds};
 };

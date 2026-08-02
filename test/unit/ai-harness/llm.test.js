@@ -2,6 +2,7 @@ import {
     DEFAULT_MODEL,
     buildSystemPrompt,
     buildUserPrompt,
+    buildTurnUserPrompt,
     buildEnvelopeSystemPrompt,
     parseDSL,
     parseEnvelope,
@@ -165,64 +166,82 @@ describe('parseDSL substack validation', () => {
     });
 });
 
-describe('parseEnvelope', () => {
-    test('answer only', () => {
+describe('buildTurnUserPrompt', () => {
+    test('numbers current scripts with 1-based ids and prints a find token', () => {
+        const p = buildTurnUserPrompt({instruction: 'walk', currentScripts: [flag([['say', 'Hi']]), flag([['turn', 15]])]});
+        expect(p).toMatch(/#1/);
+        expect(p).toMatch(/#2/);
+        expect(p).toMatch(/find:/);
+        expect(p).toMatch(/walk/);
+    });
+    test('empty program asks to create', () => {
+        expect(buildTurnUserPrompt({instruction: 'jump', currentScripts: []})).toMatch(/jump/);
+    });
+    test('inlines recent history text, not block payloads', () => {
+        const p = buildTurnUserPrompt({instruction: 'x', currentScripts: [], history: [
+            {role: 'user', text: 'walk'}, {role: 'ai', text: 'Added a move block'}
+        ]});
+        expect(p).toContain('walk');
+        expect(p).toContain('Added a move block');
+    });
+});
+
+describe('parseEnvelope (edits)', () => {
+    const j = o => JSON.stringify(o);
+    test('answer only → no edits key', () => {
         const out = parseEnvelope('{"answer":"Use the move block!"}');
-        expect(out.answer).toBe('Use the move block!');
-        expect(out.blocks).toBeUndefined();
+        expect(out).toEqual({answer: 'Use the move block!'});
     });
-    test('answer + valid blocks', () => {
-        const out = parseEnvelope('{"answer":"ok","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
-        expect(out.answer).toBe('ok');
-        expect(out.blocks).toHaveLength(1);
+    test('answer + valid edits (add + remove with find)', () => {
+        const out = parseEnvelope(j({answer: 'ok', edits: [
+            {action: 'add', script: flag([['move', 10]])},
+            {action: 'remove', id: 2, find: 'abc'}
+        ]}));
+        expect(out).toEqual({answer: 'ok', edits: [
+            {action: 'add', script: flag([['move', 10]])},
+            {action: 'remove', id: 2, find: 'abc'}
+        ]});
     });
-    test('malformed blocks keeps answer, drops blocks (fail-closed)', () => {
-        const out = parseEnvelope('{"answer":"tried","blocks":[{"hat":"nope","body":[]}]}');
-        expect(out.answer).toBe('tried');
-        expect(out.blocks).toBeUndefined();
+    test('drops a structurally invalid edit, keeps answer + valid siblings', () => {
+        const out = parseEnvelope(j({answer: 'hi', edits: [
+            {action: 'add', script: {hat: 'nope', body: []}},   // bad hat → dropped
+            {action: 'remove', id: 1, find: 'abc'}
+        ]}));
+        expect(out).toEqual({answer: 'hi', edits: [{action: 'remove', id: 1, find: 'abc'}]});
     });
-    test('empty blocks array is not a silent success', () => {
-        const out = parseEnvelope('{"answer":"hmm","blocks":[]}');
-        expect(out.blocks).toBeUndefined(); // empty → treated as no blocks
+    test('drops modify/remove missing find (string required)', () => {
+        expect(parseEnvelope(j({answer: 'x', edits: [{action: 'remove', id: 1}]}))).toEqual({answer: 'x'});
+        expect(parseEnvelope(j({answer: 'x', edits: [{action: 'modify', id: 1, script: flag([['move', 5]])}]})))
+            .toEqual({answer: 'x'});
+    });
+    test('empty edits array → no edits key', () => {
+        expect(parseEnvelope(j({answer: 'hmm', edits: []}))).toEqual({answer: 'hmm'});
     });
     test('unparseable → throws (caller shows retry nudge)', () => {
         expect(() => parseEnvelope('not json at all %%%')).toThrow();
     });
-    test('truncated mid-JSON keeps the leading answer, drops blocks', () => {
-        const out = parseEnvelope('{"answer":"Here you go!","blocks":[{"hat":"when_clicked","body":[["mov');
-        expect(out.answer).toBe('Here you go!');
-        expect(out.blocks).toBeUndefined();
+    test('truncated mid-JSON keeps the leading answer, drops edits', () => {
+        const out = parseEnvelope('{"answer": "I made it walk", "edits": [{"action":"add","scr');
+        expect(out).toEqual({answer: 'I made it walk'});
     });
-
-    // Over-match guard: salvage must NOT fire on an "answer" nested inside blocks.
-    // Before the fix, the regex lifts the nested "answer" and returns it silently.
-    test('parseEnvelope: does not salvage an "answer" nested inside blocks (over-match guard)', () => {
-        const text = '{"blocks":[{"hat":"when_clicked","answer":"not a real answer"}';
-        expect(() => parseEnvelope(text)).toThrow();
-    });
-
-    test('parseEnvelope: empty/whitespace answer with valid blocks keeps blocks, drops answer', () => {
-        const out = parseEnvelope('{"answer":"   ","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
-        expect(out.answer).toBeUndefined();
-        expect(out.blocks).toHaveLength(1);
-    });
-
-    test('parseEnvelope: non-string answer is ignored, blocks still parsed', () => {
-        const out = parseEnvelope('{"answer":123,"blocks":[{"hat":"when_clicked","body":[["move",10]]}]}');
-        expect(out.answer).toBeUndefined();
-        expect(out.blocks).toHaveLength(1);
-    });
-
-    // Item 4 — PIN test: sliceJSON uses lastIndexOf('}'), which on a truncated reply
-    // ending at a nested '}' produces an unbalanced slice that JSON.parse rejects.
-    // Therefore the success path cannot be taken with wrong data; salvage runs instead.
-    // This test pins that nested-'}' truncation stays on the salvage path (not success).
-    test('parseEnvelope: truncated at nested "}" salvages top-level answer (sliceJSON nested-} pin)', () => {
-        // Last '}' is the nested script's close, not the outer close — slice is unbalanced.
+    test('truncated at a nested "}" still salvages the top-level answer (sliceJSON nested-} pin)', () => {
+        // Last '}' is a nested script's close, not the outer close → unbalanced slice,
         // JSON.parse throws, salvage fires on the top-level "answer".
-        const out = parseEnvelope('{"answer":"real","blocks":[{"hat":"when_flag","body":[]}');
-        expect(out.answer).toBe('real');
-        expect(out.blocks).toBeUndefined();
+        const out = parseEnvelope('{"answer":"real","edits":[{"action":"add","script":{"hat":"when_flag","body":[]}');
+        expect(out).toEqual({answer: 'real'});
+    });
+    test('does not salvage an "answer" nested inside edits (over-match guard)', () => {
+        expect(() => parseEnvelope('{"edits":[{"action":"add","answer":"not a real answer"}')).toThrow();
+    });
+    test('empty/whitespace answer with a valid edit keeps edits, drops answer', () => {
+        const out = parseEnvelope(j({answer: '   ', edits: [{action: 'add', script: flag([['move', 10]])}]}));
+        expect(out.answer).toBeUndefined();
+        expect(out.edits).toHaveLength(1);
+    });
+    test('non-string answer is ignored, edits still parsed', () => {
+        const out = parseEnvelope(j({answer: 123, edits: [{action: 'add', script: flag([['move', 10]])}]}));
+        expect(out.answer).toBeUndefined();
+        expect(out.edits).toHaveLength(1);
     });
 });
 
@@ -235,14 +254,16 @@ describe('requestTurn (fetch injected)', () => {
         expect(p).toContain('Added a move block');
         expect(p).toContain('make it jump');
     });
-    test('requestTurn returns the envelope and uses the raised token cap', async () => {
+    test('requestTurn returns the edits envelope and uses the raised token cap', async () => {
         const fetchImpl = jest.fn(() => Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({content: [{text: '{"answer":"hi","blocks":[{"hat":"when_clicked","body":[["move",10]]}]}'}]})
+            json: () => Promise.resolve({content: [{text: JSON.stringify({answer: 'hi', edits: [
+                {action: 'add', script: {hat: 'when_clicked', body: [['move', 10]]}}
+            ]})}]})
         }));
         const out = await requestTurn({apiKey: 'k', instruction: 'walk'}, fetchImpl);
         expect(out.answer).toBe('hi');
-        expect(out.blocks).toHaveLength(1);
+        expect(out.edits).toHaveLength(1);
         const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
         expect(body.max_tokens).toBe(ENVELOPE_MAX_TOKENS);
     });
@@ -272,20 +293,27 @@ describe('requestTurn (fetch injected)', () => {
     });
 });
 
-describe('buildEnvelopeSystemPrompt invariants', () => {
-    test('buildEnvelopeSystemPrompt keeps DSL vocab and drops the array-only instruction', () => {
+describe('buildEnvelopeSystemPrompt (edits contract)', () => {
+    test('keeps DSL vocab, drops array-only instruction, teaches add/modify/remove + copy-find + steering', () => {
         const p = buildEnvelopeSystemPrompt();
         expect(p).toMatch(/move/);          // DSL vocab retained
         expect(p).toMatch(/when_flag/);
         expect(p).not.toMatch(/Reply with ONLY a JSON array/i);  // array-mode contradiction gone
-        expect(p).toMatch(/"blocks"/);      // envelope instruction present
+        expect(p).toMatch(/"edits"/);
+        expect(p).toMatch(/add/);
+        expect(p).toMatch(/modify/);
+        expect(p).toMatch(/remove/);
+        expect(p).toMatch(/find/);
+        expect(p.toLowerCase()).toMatch(/copy/);        // copy the find token, don't derive it
+        expect(p.toLowerCase()).toMatch(/instead of/);  // replacement steering
+        expect(p.toLowerCase()).toMatch(/unchanged|do not mention|kept|is kept/);
     });
 });
 
 describe('parseEnvelope bare-array lift', () => {
-    test('parseEnvelope: a bare array reply is lifted into blocks (model regressed to legacy shape)', () => {
+    test('a bare array reply is lifted into all-add edits (model regressed to legacy shape)', () => {
         const out = parseEnvelope('[{"hat":"when_flag","body":[["move",10]]}]');
-        expect(out.blocks).toHaveLength(1);
+        expect(out.edits).toEqual([{action: 'add', script: {hat: 'when_flag', body: [['move', 10]]}}]);
         expect(out.answer).toBeUndefined();
     });
 });

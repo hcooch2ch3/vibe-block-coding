@@ -4,6 +4,7 @@
 import {generate, edit, measureBuildRate, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
 import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
 import {hashProgram} from '../../../src/lib/ai-harness/base-hash';
+import {scriptFingerprint} from '../../../src/lib/ai-harness/edit';
 import {makeHeadlessVM} from './headless-target';
 
 // fakeVm: a minimal vm stub for measureBuildRate (vm is unused-but-kept for
@@ -18,10 +19,12 @@ const fakeVm = () => {
     };
 };
 
-// envelope: mock an Anthropic response returning a unified-chat envelope
-// {answer, blocks} (the shape requestTurn/parseEnvelope consume).
-const envelope = (answer, blocks) => Promise.resolve({
-    ok: true, json: () => Promise.resolve({content: [{text: JSON.stringify({answer, blocks})}]})
+// envelope: mock an Anthropic response returning the id+fingerprint edits envelope.
+// The second arg is an array of scripts; each becomes an `add` edit (build turns).
+const envelope = (answer, scripts) => Promise.resolve({
+    ok: true, json: () => Promise.resolve({content: [{text: JSON.stringify({
+        answer, edits: (scripts || []).map(s => ({action: 'add', script: s}))
+    })}]})
 });
 
 const flag = body => ({hat: 'when_flag', body});
@@ -103,165 +106,125 @@ describe('measureBuildRate', () => {
     });
 });
 
-// Helper: build a fetch stub returning an envelope with the given answer+blocks.
-const blocksFetch = (answer, blocks) => jest.fn(() => envelope(answer, blocks));
-
-describe('propose', () => {
-    test('propose holds blocks — no injection, workspace untouched', async () => {
-        const {vm, target} = makeHeadlessVM();
-        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
-        const {answer, proposal} = await propose(
-            vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
-            blocksFetch('ok', [{hat: 'when_clicked', body: [['move', 10]]}]));
-        expect(answer).toBe('ok');
-        expect(proposal.kind).toBe('generate');
-        expect(proposal.baseStamp).toEqual({targetId: target.id, baseHash: hashProgram([])});
-        expect(shareSpy).not.toHaveBeenCalled();
-        expect(decompile(target.blocks)).toEqual([]);
-    });
-
-    test('propose returns answer-only when the model returns no blocks', async () => {
-        const {vm, target} = makeHeadlessVM();
-        const out = await propose(
-            vm, {apiKey: 'k', instruction: 'what is a sprite?', targetId: target.id},
-            jest.fn(() => envelope('A sprite is a character!', [])));
-        expect(out.answer).toBe('A sprite is a character!');
-        expect(out.proposal).toBeUndefined();
-    });
+// editsEnvelope: mock an Anthropic response returning an explicit edits list.
+const editsEnvelope = (answer, edits) => Promise.resolve({
+    ok: true, json: () => Promise.resolve({content: [{text: JSON.stringify({answer, edits})}]})
 });
 
-describe('applyProposal', () => {
-    test('applyProposal injects a fresh generate proposal', async () => {
+describe('propose/applyProposal — id+fingerprint edits', () => {
+    const s = body => ({hat: 'when_flag', body});
+    const fp = scriptFingerprint;
+    const seed = (vm, target, scripts) => vm.shareBlocksToTarget(compile(scripts), target.id);
+
+    test('propose does not mutate the workspace (no injection)', async () => {
         const {vm, target} = makeHeadlessVM();
-        const proposal = {kind: 'generate', blocks: [{hat: 'when_clicked', body: [['move', 10]]}],
-            baseStamp: {targetId: target.id, baseHash: hashProgram([])}};
-        const out = await applyProposal(vm, proposal);
-        expect(out.ok).toBe(true);
-        expect(decompile(target.blocks)).toEqual([{hat: 'when_clicked', body: [['move', 10]]}]);
+        await seed(vm, target, [s([['forever', [['turn', 15]]]])]);
+        const before = decompile(target.blocks);
+        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
+        await propose(vm, {apiKey: 'k', instruction: 'walk around', targetId: target.id},
+            () => editsEnvelope('walk', [{action: 'add', script: s([['move', 10]])}]));
+        expect(shareSpy).not.toHaveBeenCalled();
+        expect(decompile(target.blocks)).toEqual(before);
     });
 
-    // critic #1 — the core stale-guard integration test (generate)
-    test('applyProposal fails closed on a stale workspace — no injection', async () => {
+    test('ADD keeps the existing spin script (the reported bug)', async () => {
         const {vm, target} = makeHeadlessVM();
-        const {proposal} = await propose(
-            vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
-            blocksFetch('ok', [{hat: 'when_clicked', body: [['move', 10]]}]));
+        await seed(vm, target, [s([['say', 'Hello']]), s([['forever', [['turn', 15]]]])]);
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'walk around', targetId: target.id},
+            () => editsEnvelope('walk', [
+                {action: 'add', script: s([['forever', [['move', 10], ['if_on_edge_bounce']]]])}
+            ]));
+        expect(proposal.kind).toBe('edit');
+        expect(proposal.ops).toEqual([
+            {type: 'add', index: null, script: s([['forever', [['move', 10], ['if_on_edge_bounce']]]])}
+        ]);
+        expect(proposal.baseStamp).toEqual({targetId: target.id, baseHash: hashProgram(decompile(target.blocks))});
+        const res = await applyProposal(vm, proposal);
+        expect(res.ok).toBe(true);
+        const after = decompile(target.blocks);
+        expect(after.length).toBe(3);
+        expect(JSON.stringify(after)).toMatch(/"turn"/);   // spin survived
+    });
+
+    test('REPLACEMENT: remove #id (find copied) deletes only that script', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const current = [s([['forever', [['turn', 15]]]]), s([['say', 'Hi']])]; // #1 spin, #2 say
+        await seed(vm, target, current);
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'walk instead of spin', targetId: target.id},
+            () => editsEnvelope('walk not spin', [
+                {action: 'remove', id: 1, find: fp(current[0])},
+                {action: 'add', script: s([['forever', [['move', 10]]]])}
+            ]));
+        const res = await applyProposal(vm, proposal);
+        expect(res.ok).toBe(true);
+        const after = JSON.stringify(decompile(target.blocks));
+        expect(after).not.toMatch(/"turn"/);   // spin removed
+        expect(after).toMatch(/"move"/);        // walk added
+        expect(after).toMatch(/"say"/);         // say kept
+    });
+
+    test('WRONG id (find mismatch) is dropped — no destructive edit (C2)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const current = [s([['say', 'Hello']]), s([['forever', [['turn', 15]]]])];
+        await seed(vm, target, current);
+        // model means to remove #2 (spin) but writes id:1; find describes #2
+        const out = await propose(vm, {apiKey: 'k', instruction: 'x', targetId: target.id},
+            () => editsEnvelope('oops', [{action: 'remove', id: 1, find: fp(current[1])}]));
+        expect(out.proposal).toBeUndefined();
+        expect(out.answer).toBe('oops');
+    });
+
+    test('answer-only reply yields no proposal', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const out = await propose(vm, {apiKey: 'k', instruction: 'what color?', targetId: target.id},
+            () => editsEnvelope('orange!', undefined));
+        expect(out.proposal).toBeUndefined();
+        expect(out.answer).toBe('orange!');
+    });
+
+    test('empty target: adds create the program', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'jump', targetId: target.id},
+            () => editsEnvelope('jump', [{action: 'add', script: s([['change_y', 50]])}]));
+        const res = await applyProposal(vm, proposal);
+        expect(res.ok).toBe(true);
+        expect(decompile(target.blocks)).toEqual([s([['change_y', 50]])]);
+    });
+
+    test('changedTopIds: only the added/replaced hats, kept ones excluded', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const current = [s([['move', 10]]), s([['say', 'hi']])];
+        await seed(vm, target, current);
+        const keptBefore = scriptHatIds(target.blocks);
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'change second', targetId: target.id},
+            () => editsEnvelope('ok', [
+                {action: 'modify', id: 2, find: fp(current[1]), script: s([['say', 'bye']])}
+            ]));
+        const out = await applyProposal(vm, proposal);
+        expect(out.ok).toBe(true);
+        expect(out.changedTopIds.length).toBe(1);
+        out.changedTopIds.forEach(id => expect(keptBefore).not.toContain(id));
+        out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
+    });
+
+    test('fails closed on a stale workspace — no injection', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, target, [s([['move', 10]])]);
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'say hi', targetId: target.id},
+            () => editsEnvelope('ok', [{action: 'add', script: s([['say', 'hi']])}]));
         // child hand-edits AFTER proposing → base no longer matches
-        await vm.shareBlocksToTarget(compile([{hat: 'when_flag', body: [['move', 5]]}]), target.id);
+        await vm.shareBlocksToTarget(compile([s([['move', 5]])]), target.id);
         const before = decompile(target.blocks);
         const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
         const out = await applyProposal(vm, proposal);
         expect(out).toEqual({ok: false, stale: true});
-        expect(shareSpy).not.toHaveBeenCalled();          // neither shareBlocksToTarget...
-        expect(decompile(target.blocks)).toEqual(before); // ...nor applyEdit ran
-    });
-
-    // stale EDIT proposal (constructed) — hash mismatch → no injection
-    test('applyProposal fails closed on a stale edit proposal', async () => {
-        const {vm, target} = makeHeadlessVM();
-        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
-        const proposal = {kind: 'edit', oldScripts: [], newScripts: [{hat: 'when_flag', body: [['move', 10]]}],
-            baseStamp: {targetId: target.id, baseHash: 'STALE'}}; // live empty → '[]' !== 'STALE'
-        const out = await applyProposal(vm, proposal);
-        expect(out).toEqual({ok: false, stale: true});
         expect(shareSpy).not.toHaveBeenCalled();
+        expect(decompile(target.blocks)).toEqual(before);
     });
 
-    // A3a — real propose→edit→apply round-trip: edit proposal applies and workspace reflects edit
-    test('applyProposal edit happy path — real propose→edit→apply round-trip', async () => {
+    test('legacy proposal without ops → stale (back-compat guard)', async () => {
         const {vm, target} = makeHeadlessVM();
-        // Seed the target with an initial generate so it is non-empty at propose time.
-        const seedFetch = fetchReturning([flag([['move', 10]])]);
-        await generate(vm, {apiKey: 'k', instruction: 'walk', targetId: target.id}, seedFetch);
-        // propose with the target non-empty → kind:'edit'
-        const editedScript = flag([['move', 10], ['say', 'hi']]);
-        const {proposal} = await propose(
-            vm,
-            {apiKey: 'k', instruction: 'also say hi', targetId: target.id},
-            blocksFetch('ok', [editedScript])
-        );
-        expect(proposal.kind).toBe('edit');
-        // apply the edit proposal
-        const out = await applyProposal(vm, proposal);
-        expect(out.ok).toBe(true);
-        expect(asSet(decompile(target.blocks))).toEqual(asSet([editedScript]));
-    });
-
-    // A3b — real-flow edit stale: hand-edit after propose → applyProposal detects stale
-    test('applyProposal edit stale — workspace edited between propose and apply', async () => {
-        const {vm, target} = makeHeadlessVM();
-        // Seed so target is non-empty.
-        await generate(vm, {apiKey: 'k', instruction: 'walk', targetId: target.id},
-            fetchReturning([flag([['move', 10]])]));
-        // propose an edit
-        const {proposal} = await propose(
-            vm,
-            {apiKey: 'k', instruction: 'also say hi', targetId: target.id},
-            blocksFetch('ok', [flag([['move', 10], ['say', 'hi']])])
-        );
-        expect(proposal.kind).toBe('edit');
-        // hand-edit the workspace AFTER propose → hash diverges
-        await vm.shareBlocksToTarget(
-            compile([flag([['move', 99]])]),
-            target.id
-        );
-        const beforeApply = decompile(target.blocks);
-        const shareSpy = jest.spyOn(vm, 'shareBlocksToTarget');
-        const out = await applyProposal(vm, proposal);
-        expect(out).toEqual({ok: false, stale: true});
-        expect(shareSpy).not.toHaveBeenCalled();
-        expect(asSet(decompile(target.blocks))).toEqual(asSet(beforeApply));
-    });
-
-    test('applyProposal generate returns changedTopIds that exist in the target', async () => {
-        const {vm, target} = makeHeadlessVM();
-        const {proposal} = await propose(
-            vm,
-            {apiKey: 'k', instruction: 'walk', targetId: target.id},
-            blocksFetch('ok', [flag([['move', 10]])]) // envelope shape, matching the rest of the propose suite
-        );
-        expect(proposal.kind).toBe('generate');
-        const out = await applyProposal(vm, proposal);
-        expect(out.ok).toBe(true);
-        expect(Array.isArray(out.changedTopIds)).toBe(true);
-        expect(out.changedTopIds.length).toBe(1);
-        // falsifiable "no dead id" invariant: every glow target must exist in the vm
-        out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
-    });
-
-    test('applyProposal edit returns only the added/replaced hats, not kept ones', async () => {
-        const {vm, target} = makeHeadlessVM();
-        // seed two scripts so one can be kept while the other is edited
-        await generate(vm, {apiKey: 'k', instruction: 'seed', targetId: target.id},
-            fetchReturning([flag([['move', 10]]), flag([['say', 'hi']])]));
-        const keptHatsBefore = scriptHatIds(target.blocks);
-        // edit: keep script 0 as-is, change script 1's body → replace
-        const {proposal} = await propose(
-            vm,
-            {apiKey: 'k', instruction: 'change second', targetId: target.id},
-            blocksFetch('ok', [flag([['move', 10]]), flag([['say', 'bye']])])
-        );
-        expect(proposal.kind).toBe('edit');
-        const out = await applyProposal(vm, proposal);
-        expect(out.ok).toBe(true);
-        // exactly one changed top (the replaced script); the kept hat id is NOT included
-        expect(out.changedTopIds.length).toBe(1);
-        out.changedTopIds.forEach(id => expect(keptHatsBefore).not.toContain(id));
-        out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
-    });
-
-    test('applyProposal keep-only edit returns an empty changedTopIds', async () => {
-        const {vm, target} = makeHeadlessVM();
-        await generate(vm, {apiKey: 'k', instruction: 'seed', targetId: target.id},
-            fetchReturning([flag([['move', 10]])]));
-        const {proposal} = await propose(
-            vm,
-            {apiKey: 'k', instruction: 'no change', targetId: target.id},
-            blocksFetch('ok', [flag([['move', 10]])]) // identical → keep-only
-        );
-        expect(proposal.kind).toBe('edit');
-        const out = await applyProposal(vm, proposal);
-        expect(out.ok).toBe(true);
-        expect(out.changedTopIds).toEqual([]);
+        expect(await applyProposal(vm, {kind: 'edit', baseStamp: {targetId: target.id, baseHash: 'x'}}))
+            .toEqual({ok: false, stale: true});
     });
 });

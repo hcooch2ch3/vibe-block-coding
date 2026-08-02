@@ -58,3 +58,21 @@ test('ignored: shows ignored label, no apply or rebuild', () => {
     expect(w.find('.proposal-card__apply')).toHaveLength(0);
     expect(w.find('.proposal-card__rebuild')).toHaveLength(0);
 });
+
+test('pending with removeCount renders the pluralized removal warning (ICU render)', () => {
+    const w = shallowWithIntl(
+        <ProposalCard status="pending" previews={[]} removeCount={2}
+            onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    const warn = w.find('.proposal-card__removes');
+    expect(warn).toHaveLength(1);
+    expect(warn.text()).toContain('2 block stacks');
+});
+
+test('removeCount 0 shows no removal warning', () => {
+    const w = shallowWithIntl(
+        <ProposalCard status="pending" previews={previews} removeCount={0}
+            onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    expect(w.find('.proposal-card__removes')).toHaveLength(0);
+});

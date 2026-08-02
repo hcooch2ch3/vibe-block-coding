@@ -4,26 +4,24 @@ import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import classNames from 'classnames';
 import ProposalCard from './proposal-card.jsx';
-import {diff} from '../../lib/ai-harness/edit';
 import styles from './vibe-prompt.css';
 
 const messages = defineMessages({
     makeIt: {id: 'vibe.prompt.makeIt', defaultMessage: '🧩 Make it', description: 'Turn an answer into a build'}
 });
 
-// Turn a proposal's preview into the list of {script, variant} the card renders.
-// generate → every block is newly added. edit → only the scripts the diff marks
-// add (new stack, 'added') or replace (existing stack changed, 'updated'); kept
-// scripts are omitted so the card shows just what this turn does. Missing preview
+// Turn a proposal's ops into the {script, variant} list the card renders. add →
+// a new stack ('added'); replace → an existing stack changed ('updated'); remove
+// and keep show nothing (remove is surfaced separately as a count). Missing preview
 // (terminal turns strip it) → [].
 const buildPreviews = function (preview) {
-    if (!preview) return [];
-    if (preview.kind === 'generate') {
-        return preview.blocks.map(script => ({script, variant: 'added'}));
-    }
-    return diff(preview.oldScripts, preview.newScripts)
+    if (!preview || !Array.isArray(preview.ops)) return [];
+    return preview.ops
         .filter(op => op.type === 'add' || op.type === 'replace')
         .map(op => ({script: op.script, variant: op.type === 'add' ? 'added' : 'updated'}));
+};
+const countRemoves = function (preview) {
+    return (preview && Array.isArray(preview.ops)) ? preview.ops.filter(op => op.type === 'remove').length : 0;
 };
 
 // Renders one chat turn by shape. Class (not functional) so the Make-it/Apply/Ignore/
@@ -69,17 +67,17 @@ class HistoryRow extends React.Component {
             );
         }
         if (turn.kind !== 'proposal') return null;
-        // kind === 'proposal'. Preview only the scripts this proposal actually
-        // CHANGES — not the whole post-edit program. An 'edit' turn sends the
-        // current program to the model and gets the full modified program back,
-        // so newScripts still contains the unchanged (kept) scripts; showing them
-        // would falsely re-present already-applied blocks as "added". Run the same
-        // diff apply uses and keep only add/replace, tagging each with its variant.
+        // kind === 'proposal'. The proposal carries the resolved ops (add/replace/
+        // remove); the card shows a BlockPreview per add/replace and a "removes N"
+        // warning for removes. Unmentioned (kept) scripts produce no op, so they
+        // never re-appear as "added".
         const previews = buildPreviews(turn.preview);
+        const removeCount = countRemoves(turn.preview);
         return (
             <ProposalCard
                 status={turn.status}
                 previews={previews}
+                removeCount={removeCount}
                 explanation={turn.text}
                 vm={vm}
                 onApply={this.handleApply}

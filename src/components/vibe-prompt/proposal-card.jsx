@@ -19,6 +19,11 @@ const messages = defineMessages({
         id: 'vibe.proposal.stale',
         defaultMessage: 'Workspace changed',
         description: 'The workspace changed since this was proposed'
+    },
+    removes: {
+        id: 'vibe.proposal.removes',
+        defaultMessage: 'This will remove {count, plural, one {# block stack} other {# block stacks}}.',
+        description: 'Warning shown before applying a proposal that deletes script stacks'
     }
 });
 
@@ -26,7 +31,7 @@ const messages = defineMessages({
 // BlockPreview per changed script. `previews` is [{script, variant}] — the caller
 // already dropped unchanged scripts and tagged each with added/updated. Named
 // export for shallow tests; default is intl-wrapped.
-const ProposalCard = function ({status, previews, explanation, onApply, onIgnore, onRebuild, vm, intl}) {
+const ProposalCard = function ({status, previews, removeCount, explanation, onApply, onIgnore, onRebuild, vm, intl}) {
     return (
         <div className={classNames('proposal-card', styles.card)}>
             <div className={classNames('proposal-card__header', styles.header)}>
@@ -76,6 +81,11 @@ const ProposalCard = function ({status, previews, explanation, onApply, onIgnore
             {explanation ? (
                 <div className={classNames('proposal-card__explanation', styles.explanation)}>{explanation}</div>
             ) : null}
+            {(status === 'pending' || status === 'stale') && removeCount > 0 && (
+                <div className={classNames('proposal-card__removes', styles.removes)}>
+                    {intl.formatMessage(messages.removes, {count: removeCount})}
+                </div>
+            )}
             {(status === 'pending' || status === 'stale') && previews.map((p, i) => (
                 <BlockPreview
                     key={i}
@@ -98,13 +108,14 @@ ProposalCard.propTypes = {
     onRebuild: PropTypes.func,
     previews: PropTypes.arrayOf(PropTypes.shape({
         script: PropTypes.shape({hat: PropTypes.string, body: PropTypes.array}),
-        variant: PropTypes.oneOf(['added', 'removed', 'updated'])
+        variant: PropTypes.oneOf(['added', 'updated'])
     })).isRequired,
+    removeCount: PropTypes.number,
     status: PropTypes.oneOf(['pending', 'stale', 'applied', 'ignored']).isRequired,
     vm: PropTypes.object
 };
 
-ProposalCard.defaultProps = {onApply: noop, onIgnore: noop, onRebuild: noop};
+ProposalCard.defaultProps = {onApply: noop, onIgnore: noop, onRebuild: noop, removeCount: 0};
 
 export {ProposalCard};
 export default injectIntl(ProposalCard);

@@ -14,6 +14,7 @@
  */
 
 import {OPMAP} from './dsl';
+import {scriptFingerprint} from './edit';
 
 export const DEFAULT_MODEL = 'claude-haiku-4-5';
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -116,6 +117,39 @@ export const buildUserPrompt = function (opts) {
     return [...historyLines, `Create a program so that: ${instruction}`].join('\n');
 };
 
+// Recent conversation as inline text context (no DSL payloads). Shared by the
+// envelope turn prompt.
+const historyPreamble = function (history) {
+    if (!history || !history.length) return [];
+    return ['Recent conversation:', ...history.map(t => `${t.role === 'ai' ? 'AI' : 'User'}: ${t.text}`), ''];
+};
+
+/**
+ * Envelope turn prompt. Numbers the current program and prints each script's
+ * `find` token so the model can COPY it into a modify/remove edit (rather than
+ * derive it — no format ambiguity). Empty program → create wording.
+ * @param {object} opts - {instruction, currentScripts?, history?}
+ * @returns {string} 사용자 메시지 본문
+ */
+export const buildTurnUserPrompt = function (opts) {
+    const {instruction, currentScripts, history} = opts;
+    const pre = historyPreamble(history);
+    if (currentScripts && currentScripts.length) {
+        const numbered = currentScripts.map((s, i) =>
+            `#${i + 1} (find: ${scriptFingerprint(s)}) ${JSON.stringify(s)}`);
+        return [
+            ...pre,
+            'Current program (each script shows its id and find token):',
+            ...numbered,
+            '',
+            `The child says: ${instruction}`,
+            'Return ONLY the scripts that must change, as edits. Scripts you do not',
+            'mention stay exactly as they are.'
+        ].join('\n');
+    }
+    return [...pre, `The program is empty. Create it so that: ${instruction}`].join('\n');
+};
+
 // 코드펜스/산문에 섞인 응답에서 첫 JSON 값(배열 또는 객체) 문자열만 잘라낸다.
 const sliceJSON = function (text) {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -183,16 +217,17 @@ export const parseDSL = function (text) {
 };
 
 /**
- * Parse the unified-chat envelope. `answer` is free text; `blocks` (optional)
- * is validated through validateScripts. Independent-field fail-closed: invalid
- * or empty blocks are dropped WITHOUT discarding a valid answer.
+ * Parse the unified-chat envelope. `answer` is free text; `edits` (optional) is
+ * an array of {action, id?, find?, script?} validated structurally per-edit.
+ * Independent-field fail-closed: an invalid or empty edits array is dropped
+ * WITHOUT discarding a valid answer.
  *
  * Handles the max_tokens truncation path: a reply cut mid-JSON that still has
- * a complete leading "answer" field will have the answer salvaged and blocks
+ * a complete leading "answer" field will have the answer salvaged and edits
  * dropped, rather than throwing.
  *
  * @param {string} text - raw model reply
- * @returns {object} object with optional answer string and optional validated blocks array
+ * @returns {object} object with optional answer string and optional validated edits array
  */
 export const parseEnvelope = function (text) {
     let obj;
@@ -260,21 +295,47 @@ export const parseEnvelope = function (text) {
         throw e;
     }
     const out = {};
-    // Bare-array path: model regressed to legacy shape (emits [{hat,body},...] directly).
-    // Lift into blocks exactly like the object path — fail-closed on invalid or empty.
-    if (Array.isArray(obj)) {
-        if (obj.length) {
-            try {
-                out.blocks = validateScripts(obj);
-            } catch (e) { /* fail-closed: drop invalid blocks */ }
+    // Structural validation per edit (independent fail-closed). Range/fingerprint
+    // matching happens later in editsToOps, which knows the current program.
+    const validateEdits = function (list) {
+        const kept = [];
+        for (const e of list) {
+            if (!e || typeof e !== 'object') continue;
+            if (e.action === 'add') {
+                if (!e.script) continue;
+                try {
+                    validateScripts([e.script]);
+                } catch (err) {
+                    continue;
+                }
+                kept.push({action: 'add', script: e.script});
+            } else if (e.action === 'modify') {
+                if (!e.script || !(Number.isInteger(e.id) && e.id >= 1) || typeof e.find !== 'string') continue;
+                try {
+                    validateScripts([e.script]);
+                } catch (err) {
+                    continue;
+                }
+                kept.push({action: 'modify', id: e.id, find: e.find, script: e.script});
+            } else if (e.action === 'remove') {
+                if (!(Number.isInteger(e.id) && e.id >= 1) || typeof e.find !== 'string') continue;
+                kept.push({action: 'remove', id: e.id, find: e.find});
+            }
         }
+        return kept;
+    };
+    // Bare-array regression (model emits [{hat,body},...]) → all-adds. NOTE: with
+    // keep-by-omission this duplicates the program if the model resends everything;
+    // rare fallback, surfaced by the eval (measureEditQuality).
+    if (Array.isArray(obj)) {
+        const kept = validateEdits(obj.map(s => ({action: 'add', script: s})));
+        if (kept.length) out.edits = kept;
         return out;
     }
     if (obj && typeof obj.answer === 'string' && obj.answer.trim()) out.answer = obj.answer;
-    if (obj && Array.isArray(obj.blocks) && obj.blocks.length) {
-        try {
-            out.blocks = validateScripts(obj.blocks);
-        } catch (e) { /* fail-closed: keep answer, drop blocks */ }
+    if (obj && Array.isArray(obj.edits) && obj.edits.length) {
+        const kept = validateEdits(obj.edits);
+        if (kept.length) out.edits = kept;
     }
     return out;
 };
@@ -282,7 +343,7 @@ export const parseEnvelope = function (text) {
 export const ENVELOPE_MAX_TOKENS = 2048;
 
 // Envelope-mode system prompt: same DSL vocabulary as buildSystemPrompt, but the
-// model returns {answer, blocks} instead of a bare array. Kept SEPARATE so the
+// model returns {answer, edits} instead of a bare array. Kept SEPARATE so the
 // legacy requestScripts/parseDSL path (Task 0 measure, window.vibe.smoke) still
 // gets an array and does not break.
 export const buildEnvelopeSystemPrompt = function () {
@@ -294,22 +355,31 @@ export const buildEnvelopeSystemPrompt = function () {
     return [
         ...vocab,
         '',
-        'If the child is ASKING a question, reply {"answer": "<short friendly reply>"} with no blocks.',
+        'If the child is ASKING a question, reply {"answer": "<short friendly reply>"} with no edits.',
         'If the child wants to MAKE or CHANGE something, reply',
-        '{"answer": "<one short line explaining what you did>", "blocks": [<scripts>]}.',
-        'Each script in "blocks" is {"hat": "<hat step>", "body": [["step", ...args], ...]}.',
-        'ALWAYS include blocks when they want to build. No prose outside the JSON, no code fences.'
+        '{"answer": "<one short line explaining what you did>", "edits": [<edits>]}.',
+        'Each edit is ONE of:',
+        '  {"action": "add", "script": {"hat": "<hat>", "body": [["step", ...], ...]}}',
+        '  {"action": "modify", "id": <id>, "find": "<find token of #id>", "script": {...}}',
+        '  {"action": "remove", "id": <id>, "find": "<find token of #id>"}',
+        'For modify/remove, COPY the find token printed next to script #id in the list',
+        'verbatim (do not invent or recompute it) — it is a safety check; if it does not',
+        'match, your edit is ignored.',
+        'Only include scripts that CHANGE — every script you do not mention is kept.',
+        'If the child wants behavior X INSTEAD of Y, modify or remove the script doing Y —',
+        'do NOT just add X. To add a behavior alongside the rest, use "add".',
+        'No prose outside the JSON, no code fences.'
     ].join('\n');
 };
 
 /**
  * Envelope-mode turn: calls the Anthropic Messages API and returns a parsed
- * {answer?, blocks?} envelope. Uses buildEnvelopeSystemPrompt so the model
+ * {answer?, edits?} envelope. Uses buildEnvelopeSystemPrompt so the model
  * emits structured JSON rather than a bare DSL array. Supports optional history
- * context passed through to buildUserPrompt.
+ * context passed through to buildTurnUserPrompt.
  * @param {object} config - object with apiKey, instruction, and optional model, currentScripts, history
  * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
- * @returns {Promise<object>} parsed envelope with optional answer string and optional blocks array
+ * @returns {Promise<object>} parsed envelope with optional answer string and optional edits array
  */
 export const requestTurn = async function (config, fetchImpl) {
     const {apiKey, model, instruction, currentScripts, history,
@@ -327,7 +397,7 @@ export const requestTurn = async function (config, fetchImpl) {
             model: model || DEFAULT_MODEL,
             max_tokens: ENVELOPE_MAX_TOKENS,
             system: buildEnvelopeSystemPrompt(),
-            messages: [{role: 'user', content: buildUserPrompt({instruction, currentScripts, history})}]
+            messages: [{role: 'user', content: buildTurnUserPrompt({instruction, currentScripts, history})}]
         })
     }, timeoutMs);
     if (!res.ok) {

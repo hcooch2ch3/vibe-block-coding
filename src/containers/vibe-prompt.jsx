@@ -18,10 +18,10 @@ import {
 } from '../lib/ai-harness/ui-prefs';
 
 // Task 0 gate: route the model's envelope through the answer/proposal split
-// (a text reply stays an answer; blocks become a pending proposal). Shipped true.
+// (a text reply stays an answer; edits become a pending proposal). Shipped true.
 // WARNING: do NOT flip to false — the false path is NOT yet implemented. With
 // AUTO_CLASSIFY===false the ternary below routes every turn (including real
-// proposals) to the answer branch and drops proposal.blocks entirely. An explicit
+// proposals) to the answer branch and drops the proposal's ops entirely. An explicit
 // Build/Ask control must be built (see plan addendum) BEFORE this flag is flipped.
 const AUTO_CLASSIFY = true;
 
@@ -278,7 +278,7 @@ class VibePrompt extends React.Component {
                 // AUTO_CLASSIFY true (shipped) → keep the model's answer/proposal
                 // split. The false path is NOT yet implemented: flipping the flag
                 // currently routes every turn to the answer branch and drops
-                // proposal.blocks — an explicit Build/Ask control must be built
+                // the proposal's ops — an explicit Build/Ask control must be built
                 // (see plan addendum) before the flag is changed.
                 const aiTurn = (AUTO_CLASSIFY && proposal) ?
                     {

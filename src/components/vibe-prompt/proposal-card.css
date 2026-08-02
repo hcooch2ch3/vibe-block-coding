@@ -74,6 +74,14 @@
     border-bottom: 1px solid #eeeeee;
 }
 
+.removes {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    color: #b3541e;
+    background: #fff6ef;
+    border-bottom: 1px solid #f3d9c6;
+}
+
 .applied {
     color: #3a8a3a;
     font-weight: 600;

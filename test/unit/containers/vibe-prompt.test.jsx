@@ -23,11 +23,11 @@ jest.mock('../../../src/lib/ai-harness/key-store', () => ({
 const flushPromises = () => new Promise(resolve => setImmediate(resolve));
 const noopEvent = {preventDefault: () => {}};
 
-// A minimal proposal payload as propose() would return it.
+// A minimal proposal payload as propose() would return it (id+fingerprint ops shape).
 const makeProposal = (targetId = 'sprite-a') => ({
-    kind: 'generate',
-    blocks: [{hat: 'when_clicked', body: []}],
-    baseStamp: {targetId, baseHash: 'H'}
+    kind: 'edit',
+    baseStamp: {targetId, baseHash: 'H'},
+    ops: [{type: 'add', index: null, script: {hat: 'when_clicked', body: []}}]
 });
 
 const makeVm = blocks => {
