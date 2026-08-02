@@ -1,7 +1,7 @@
 // The generate/edit helpers behind window.vibe — the reusable core the live
 // smoke test and (week 2) the UI both call. Driven against a real headless
 // scratch-vm; only fetch is mocked.
-import {generate, edit, measureBuildRate, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
+import {generate, edit, measureBuildRate, measureEditQuality, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
 import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
 import {hashProgram} from '../../../src/lib/ai-harness/base-hash';
 import {scriptFingerprint} from '../../../src/lib/ai-harness/edit';
@@ -226,5 +226,90 @@ describe('propose/applyProposal — id+fingerprint edits', () => {
         const {vm, target} = makeHeadlessVM();
         expect(await applyProposal(vm, {kind: 'edit', baseStamp: {targetId: target.id, baseHash: 'x'}}))
             .toEqual({ok: false, stale: true});
+    });
+});
+
+describe('measureEditQuality (scores via the production editsToOps path)', () => {
+    const s = body => ({hat: 'when_flag', body});
+    const fp = scriptFingerprint;
+    const reply = edits => Promise.resolve({
+        ok: true, json: () => Promise.resolve({content: [{text: JSON.stringify({answer: 'x', edits})}]})
+    });
+
+    test('a clean add scores correct; a wrong-find remove is dropped by the gate → incorrect', async () => {
+        const {vm} = makeHeadlessVM();
+        const spin = [s([['forever', [['turn', 15]]]])];
+        const cases = [
+            {instruction: 'also walk', currentScripts: spin, expect: {action: 'add'}},
+            {instruction: 'stop spinning', currentScripts: spin, expect: {action: 'remove', findIndex: 0}}
+        ];
+        let call = 0;
+        const fetchImpl = () => (call++ === 0 ?
+            reply([{action: 'add', script: s([['move', 10]])}]) :
+            reply([{action: 'remove', id: 1, find: 'WRONGHASH'}]));
+        expect(await measureEditQuality(vm, {apiKey: 'k', cases}, fetchImpl)).toEqual({total: 2, correct: 1, rate: 0.5});
+    });
+
+    test('an exact find + right id scores correct', async () => {
+        const {vm} = makeHeadlessVM();
+        const spin = [s([['forever', [['turn', 15]]]])];
+        const fetchImpl = () => reply([{action: 'remove', id: 1, find: fp(spin[0])}]);
+        expect(await measureEditQuality(vm, {apiKey: 'k', cases: [
+            {instruction: 'stop spinning', currentScripts: spin, expect: {action: 'remove', findIndex: 0}}
+        ]}, fetchImpl)).toEqual({total: 1, correct: 1, rate: 1});
+    });
+
+    test('a SUBSTRING of the true fingerprint is not accepted (exact, not includes)', async () => {
+        const {vm} = makeHeadlessVM();
+        const spin = [s([['forever', [['turn', 15]]]])];
+        const fetchImpl = () => reply([{action: 'remove', id: 1, find: fp(spin[0]).slice(0, -1)}]);
+        expect((await measureEditQuality(vm, {apiKey: 'k', cases: [
+            {instruction: 'stop spinning', currentScripts: spin, expect: {action: 'remove', findIndex: 0}}
+        ]}, fetchImpl)).correct).toBe(0);
+    });
+
+    test('right find but WRONG id → dropped by the id-based gate → incorrect (mirrors production)', async () => {
+        const {vm} = makeHeadlessVM();
+        const prog = [s([['move', 10]]), s([['forever', [['turn', 15]]]])]; // #1 A, #2 B
+        // model wants to remove #2 (B), copies B's find, but writes id:1 → editsToOps drops it
+        const fetchImpl = () => reply([{action: 'remove', id: 1, find: fp(prog[1])}]);
+        expect((await measureEditQuality(vm, {apiKey: 'k', cases: [
+            {instruction: 'remove the spin', currentScripts: prog, expect: {action: 'remove', findIndex: 1}}
+        ]}, fetchImpl)).correct).toBe(0);
+    });
+
+    test('a correct edit BUNDLED with a spurious valid edit → incorrect (production applies both)', async () => {
+        const {vm} = makeHeadlessVM();
+        const prog = [s([['move', 10]]), s([['say', 'hi']])];
+        const fetchImpl = () => reply([
+            {action: 'remove', id: 2, find: fp(prog[1])},                              // the asked-for edit
+            {action: 'modify', id: 1, find: fp(prog[0]), script: s([['move', 99]])}    // spurious extra
+        ]);
+        expect((await measureEditQuality(vm, {apiKey: 'k', cases: [
+            {instruction: 'just remove the talking', currentScripts: prog, expect: {action: 'remove', findIndex: 1}}
+        ]}, fetchImpl)).correct).toBe(0);
+    });
+
+    test('an all-adds full-program resend fails an add-case (surfaces the duplicate regression)', async () => {
+        const {vm} = makeHeadlessVM();
+        const prog = [s([['move', 10]])];
+        const fetchImpl = () => reply([
+            {action: 'add', script: s([['move', 10]])},
+            {action: 'add', script: s([['say', 'hi']])}
+        ]);
+        expect((await measureEditQuality(vm, {apiKey: 'k', cases: [
+            {instruction: 'also say hi', currentScripts: prog, expect: {action: 'add'}}
+        ]}, fetchImpl)).correct).toBe(0);
+    });
+
+    test('rejects non-array cases (console footgun guard)', async () => {
+        const {vm} = makeHeadlessVM();
+        let err;
+        try {
+            await measureEditQuality(vm, {apiKey: 'k', cases: 'nope'});
+        } catch (e) {
+            err = e;
+        }
+        expect(err).toBeInstanceOf(TypeError);
     });
 });

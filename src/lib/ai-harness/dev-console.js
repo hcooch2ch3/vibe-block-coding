@@ -81,6 +81,52 @@ export const measureBuildRate = async function (vm, {apiKey, prompts, model}, fe
     return {total: prompts.length, produced, rate: prompts.length ? produced / prompts.length : 0};
 };
 
+// DSL action → the op type editsToOps produces for it.
+const OP_FOR_ACTION = {add: 'add', modify: 'replace', remove: 'remove'};
+
+/**
+ * Dev-only eval: run labeled edit cases through requestTurn, then score each case
+ * against the ACTUAL production resolver, editsToOps — NOT a lookalike proxy. A
+ * case is compliant iff the model's reply resolves to exactly ONE op, of the
+ * expected type, targeting the expected script. Because scoring runs the real
+ * editsToOps (id-based selection + exact-find gate), it inherits production's
+ * behavior by construction: a wrong-id/right-find edit is dropped (scores 0), a
+ * substring find is dropped (scores 0), and a correct edit bundled with spurious
+ * or full-program-resend edits yields >1 op (scores 0) — the lenient failure modes
+ * a `.some()` scorer would wave through.
+ *
+ * This is the load-bearing check on the "model follows the protocol" assumption
+ * (an under-compliant model silently drops the child's edits). Needs a real key —
+ * run it MANUALLY before shipping edit UI with a ~12-case labeled corpus; target
+ * rate ≥ 0.8 (the project's validation-gate precedent). Nothing in CI runs it.
+ *
+ * @param {VirtualMachine} vm - unused; kept for window.vibe signature parity
+ * @param {object} opts - {apiKey, cases, model?} where each case is
+ *   {instruction, currentScripts, expect:{action, findIndex?}} (findIndex is the
+ *   0-based index of the script a modify/remove should target)
+ * @param {Function} [fetchImpl] - injectable fetch (omit to use global fetch)
+ * @returns {Promise<object>} object with total, correct, and rate fields
+ */
+export const measureEditQuality = async function (vm, {apiKey, cases, model}, fetchImpl) {
+    if (!Array.isArray(cases)) throw new TypeError('measureEditQuality: cases must be an array');
+    let correct = 0;
+    for (const c of cases) {
+        try {
+            const {edits} = await requestTurn(
+                {apiKey, model, instruction: c.instruction, currentScripts: c.currentScripts}, fetchImpl);
+            const ops = editsToOps(edits || [], c.currentScripts); // the real production path
+            const want = c.expect;
+            let ok = ops.length === 1 && ops[0].type === OP_FOR_ACTION[want.action];
+            if (ok && typeof want.findIndex !== 'undefined') ok = ops[0].index === want.findIndex;
+            if (ok) correct++;
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[vibe.evalEdits] case failed:', c.instruction, e.message);
+        }
+    }
+    return {total: cases.length, correct, rate: cases.length ? correct / cases.length : 0};
+};
+
 /**
  * Compile the current target's program and ask the LLM to respond — but do NOT
  * mutate the workspace. Returns {answer} on a text-only reply, or
@@ -176,6 +222,8 @@ export const installDevConsole = function (vm) {
             edit(vm, {apiKey, instruction, model}),
         measure: (apiKey, prompts, model) =>
             measureBuildRate(vm, {apiKey, prompts, model}),
+        evalEdits: (apiKey, cases, model) =>
+            measureEditQuality(vm, {apiKey, cases, model}),
         // 라이브 스모크: 생성 한 번, 편집 한 번. before/after DSL 을 로그로 남긴다.
         smoke: async (apiKey, model) => {
             const before = await generate(
