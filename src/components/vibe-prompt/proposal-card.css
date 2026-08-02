@@ -8,6 +8,7 @@
     overflow: hidden;
     margin-bottom: 8px;
     background: #ffffff;
+    animation: vibe-appear 180ms ease-out;
 }
 
 .header {
@@ -76,15 +77,37 @@
 .applied {
     color: #3a8a3a;
     font-weight: 600;
+    animation: vibe-pop 260ms ease-out;
 }
 
 .ignored {
     color: #aaaaaa;
     font-style: italic;
+    animation: vibe-appear 180ms ease-out;
 }
 
 .staleLabel {
     font-size: 0.8rem;
     color: #999999;
     font-style: italic;
+}
+
+/* Surface A: the card rises/fades in on appear; the "✓ Applied" label pops. */
+@keyframes vibe-appear {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes vibe-pop {
+    0%   { opacity: 0; transform: scale(0.7); }
+    60%  { transform: scale(1.15); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card,
+    .applied,
+    .ignored {
+        animation: none;
+    }
 }
