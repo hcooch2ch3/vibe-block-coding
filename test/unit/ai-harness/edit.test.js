@@ -1,4 +1,4 @@
-import {diff, applyEdit} from '../../../src/lib/ai-harness/edit';
+import {diff, applyEdit, applyOps, editsToOps, scriptFingerprint} from '../../../src/lib/ai-harness/edit';
 import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM, reachableIds} from './headless-target';
 
@@ -223,5 +223,86 @@ describe('substack editing', () => {
         await applyEdit(vm, before, [{hat: 'when_flag', body: [['forever', [['move', '10']]]]}]);
         expect(scriptHatIds(target.blocks)[0]).toBe(beforeHatId); // keep, not rebuilt
         expect(decompile(target.blocks)).toEqual(before);
+    });
+});
+
+describe('scriptFingerprint', () => {
+    const s = body => ({hat: 'when_flag', body});
+    test('is stable and normalization-invariant (LLM "10" vs 10)', () => {
+        expect(scriptFingerprint(s([['move', 10]]))).toBe(scriptFingerprint(s([['move', '10']])));
+    });
+    test('DIFFERS for scripts with the same hat+first-op but different bodies (the v2 collision)', () => {
+        expect(scriptFingerprint(s([['forever', [['turn', 15]]]])))
+            .not.toBe(scriptFingerprint(s([['forever', [['move', 10]]]])));
+    });
+    test('empty/falsy → empty string', () => {
+        expect(scriptFingerprint(null)).toBe('');
+    });
+});
+
+describe('editsToOps (fingerprint-gated, fail-closed)', () => {
+    const s = body => ({hat: 'when_flag', body});
+    const fp = scriptFingerprint;
+    const current = [s([['say', 'Hello']]), s([['forever', [['turn', 15]]]])]; // #1 say, #2 spin
+
+    test('add needs only a script', () => {
+        expect(editsToOps([{action: 'add', script: s([['move', 10]])}], current))
+            .toEqual([{type: 'add', index: null, script: s([['move', 10]])}]);
+    });
+    test('modify/remove apply when find matches the referenced script', () => {
+        const edits = [
+            {action: 'modify', id: 1, find: fp(current[0]), script: s([['say', 'Bye']])},
+            {action: 'remove', id: 2, find: fp(current[1])}
+        ];
+        expect(editsToOps(edits, current)).toEqual([
+            {type: 'replace', index: 0, script: s([['say', 'Bye']])},
+            {type: 'remove', index: 1}
+        ]);
+    });
+    test('C2 CLOSED: wrong id whose find describes a DIFFERENT script is dropped', () => {
+        // two forevers with different bodies — the v2 hole. model means #2 (move) but writes id:1.
+        const dup = [s([['forever', [['turn', 15]]]]), s([['forever', [['move', 10]]]])];
+        expect(editsToOps([{action: 'remove', id: 1, find: fp(dup[1])}], dup)).toEqual([]);
+    });
+    test('byte-identical scripts share a fingerprint → removing either is harmless', () => {
+        const same = [s([['forever', [['turn', 15]]]]), s([['forever', [['turn', 15]]]])];
+        expect(editsToOps([{action: 'remove', id: 1, find: fp(same[0])}], same))
+            .toEqual([{type: 'remove', index: 0}]);
+    });
+    test('drops missing find, out-of-range id, unknown action, add-without-script', () => {
+        expect(editsToOps([
+            {action: 'remove', id: 2},                                   // no find
+            {action: 'modify', id: 1, script: s([])},                    // no find
+            {action: 'remove', id: 0, find: fp(current[0])},             // id 0 → idx -1 → dropped
+            {action: 'remove', id: 9, find: fp(current[0])},             // out of range (upper)
+            {action: 'delete', id: 1, find: fp(current[0])},             // unknown action
+            {action: 'add'}                                              // no script
+        ], current)).toEqual([]);
+    });
+    test('non-array edits / null current fail closed to []', () => {
+        expect(editsToOps(null, current)).toEqual([]);
+        expect(editsToOps([{action: 'remove', id: 1, find: fp(current[0])}], null)).toEqual([]);
+    });
+});
+
+describe('applyOps (editsToOps-shaped ops against a headless VM)', () => {
+    const s = body => ({hat: 'when_flag', body});
+    test('add op (index:null) appends without touching the sibling', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [s([['say', 'keep']])]);
+        const keptIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[0]);
+        await applyOps(vm, [{type: 'add', index: null, script: s([['move', 10]])}], target.id);
+        keptIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined());
+        expect(asSet(decompile(target.blocks))).toEqual(asSet([s([['say', 'keep']]), s([['move', 10]])]));
+    });
+    test('remove op deletes only the indexed hat; sibling survives', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [s([['say', 'keep']]), s([['forever', [['turn', 15]]]])]);
+        const keptIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[0]);
+        const goneIds = reachableIds(target.blocks, scriptHatIds(target.blocks)[1]);
+        await applyOps(vm, [{type: 'remove', index: 1}], target.id);
+        keptIds.forEach(id => expect(target.blocks.getBlock(id)).toBeDefined());
+        goneIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined());
+        expect(decompile(target.blocks)).toEqual([s([['say', 'keep']])]);
     });
 });
