@@ -12,7 +12,8 @@ const baseProps = {
     onSubmitKey: jest.fn(), onSubmitInstruction: jest.fn(), onEditKey: jest.fn(),
     onChipClick: jest.fn(), onRetry: jest.fn(), onClearHistory: jest.fn(),
     onToggleCollapse: jest.fn(), onDragStop: jest.fn(), onCancelKey: jest.fn(),
-    onResizeStart: jest.fn()
+    onResizeStart: jest.fn(),
+    onToggleExamples: jest.fn(), examplesOpen: false
 };
 
 test('the memory slider is not shown in the instruction view (hasKey)', () => {
@@ -31,4 +32,28 @@ test('the memory slider in the settings view reports changes via onContextTurnsC
     expect(slider).toHaveLength(1);
     slider.simulate('change', {target: {value: '5'}});
     expect(onContextTurnsChange).toHaveBeenCalledWith(5);   // Number, not '5'
+});
+
+test('welcome examples show only on an empty chat (hasKey)', () => {
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={[]} />
+    );
+    expect(wrapper.find('.vibe-example-chip').hostNodes().length).toBe(3);
+});
+
+test('welcome examples are hidden once the chat has history', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} />
+    );
+    expect(wrapper.find('.vibe-example-chip').hostNodes().length).toBe(0);
+});
+
+test('clicking a welcome example reports the plain label (no emoji)', () => {
+    const onChipClick = jest.fn();
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={[]} onChipClick={onChipClick} />
+    );
+    wrapper.find('.vibe-example-chip').hostNodes().first().simulate('click');
+    expect(onChipClick).toHaveBeenCalledWith('Walk around');
 });

@@ -91,6 +91,16 @@ const messages = defineMessages({
         defaultMessage: 'Try again',
         description: 'Button to retry the last request after an error'
     },
+    welcomeTitle: {
+        id: 'vibe.prompt.welcomeTitle',
+        defaultMessage: 'What should we make?',
+        description: 'Title of the empty-chat welcome state'
+    },
+    welcomeSubtitle: {
+        id: 'vibe.prompt.welcomeSubtitle',
+        defaultMessage: 'Try saying…',
+        description: 'Subtitle prompting the child to pick an example prompt'
+    },
     title: {
         id: 'vibe.prompt.title',
         defaultMessage: 'Vibe Block Coding',
@@ -125,6 +135,7 @@ class ChipButton extends React.Component {
         this.props.onClick(this.props.label);
     }
     render () {
+        const {emoji, label} = this.props;
         return (
             <button
                 className={this.props.className}
@@ -132,7 +143,7 @@ class ChipButton extends React.Component {
                 disabled={this.props.disabled}
                 onClick={this.handleClick}
             >
-                {this.props.label}
+                {emoji ? `${emoji} ${label}` : label}
             </button>
         );
     }
@@ -141,8 +152,52 @@ class ChipButton extends React.Component {
 ChipButton.propTypes = {
     className: PropTypes.string,
     disabled: PropTypes.bool,
+    emoji: PropTypes.string,
     label: PropTypes.string.isRequired,
     onClick: PropTypes.func.isRequired
+};
+
+// The three example prompts, each with a display-only emoji. Emoji is a
+// render-time prefix (ChipButton) — never part of the translated label, so
+// onChipClick receives the plain sentence.
+const EXAMPLE_CHIPS = [
+    {msg: messages.chipWalk, emoji: '🚶'},
+    {msg: messages.chipSpin, emoji: '🌀'},
+    {msg: messages.chipHello, emoji: '👋'}
+];
+
+// Shared by the welcome and the sheet. `disabled` greys chips while a request is
+// in flight (only relevant in the sheet — the welcome never coexists with busy).
+const renderExampleChips = (intl, onChipClick, disabled) => (
+    EXAMPLE_CHIPS.map(({msg, emoji}) => (
+        <ChipButton
+            key={msg.id}
+            className={classNames(styles.exampleChip, 'vibe-example-chip')}
+            disabled={disabled}
+            emoji={emoji}
+            label={intl.formatMessage(msg)}
+            onClick={onChipClick}
+        />
+    ))
+);
+
+// Empty-chat onboarding surface: fills the conversation area with a friendly
+// prompt + the example chips. Pure render — shown when turns.length === 0.
+const WelcomeExamples = ({intl, onChipClick}) => (
+    <div className={styles.welcome}>
+        <div className={styles.welcomeTitle}>
+            {intl.formatMessage(messages.welcomeTitle)} {'✨'}
+        </div>
+        <div className={styles.welcomeSubtitle}>
+            {intl.formatMessage(messages.welcomeSubtitle)}
+        </div>
+        {renderExampleChips(intl, onChipClick, false)}
+    </div>
+);
+
+WelcomeExamples.propTypes = {
+    intl: intlShape.isRequired,
+    onChipClick: PropTypes.func.isRequired
 };
 
 // Every edge + corner is a resize grip. Corners come last so they paint over the
@@ -248,15 +303,24 @@ const VibePromptComponent = props => {
 
     const instructionEntry = (
         <div className={styles.body}>
-            <HistoryList
-                turns={turns}
-                vm={vm}
-                onClearHistory={onClearHistory}
-                onApply={onApply}
-                onIgnore={onIgnore}
-                onRebuild={onRebuild}
-                onMakeIt={onMakeIt}
-            />
+            <div className={styles.convArea}>
+                {turns.length === 0 ? (
+                    <WelcomeExamples
+                        intl={intl}
+                        onChipClick={onChipClick}
+                    />
+                ) : (
+                    <HistoryList
+                        turns={turns}
+                        vm={vm}
+                        onClearHistory={onClearHistory}
+                        onApply={onApply}
+                        onIgnore={onIgnore}
+                        onRebuild={onRebuild}
+                        onMakeIt={onMakeIt}
+                    />
+                )}
+            </div>
             <form
                 className={classNames(styles.row, styles.composerAnchor)}
                 onSubmit={onSubmitInstruction}
@@ -281,17 +345,6 @@ const VibePromptComponent = props => {
                     {intl.formatMessage(messages.send)}
                 </button>
             </form>
-            <div className={styles.chips}>
-                {[messages.chipWalk, messages.chipSpin, messages.chipHello].map(chip => (
-                    <ChipButton
-                        key={chip.id}
-                        className={styles.chip}
-                        disabled={busy}
-                        label={intl.formatMessage(chip)}
-                        onClick={onChipClick}
-                    />
-                ))}
-            </div>
             {busy && (
                 <div className={styles.status}>
                     <span aria-live="polite">
