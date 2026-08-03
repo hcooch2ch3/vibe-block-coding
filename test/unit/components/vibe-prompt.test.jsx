@@ -57,3 +57,27 @@ test('clicking a welcome example reports the plain label (no emoji)', () => {
     wrapper.find('.vibe-example-chip').hostNodes().first().simulate('click');
     expect(onChipClick).toHaveBeenCalledWith('Walk around');
 });
+
+test('the examples button appears only with a key, expanded, and history', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const shown = mountWithIntl(<VibePromptComponent {...baseProps} hasKey turns={turns} />);
+    expect(shown.find('.vibe-examples-btn').length).toBe(1);
+
+    const empty = mountWithIntl(<VibePromptComponent {...baseProps} hasKey turns={[]} />);
+    expect(empty.find('.vibe-examples-btn').length).toBe(0);
+
+    const collapsed = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey collapsed turns={turns} />
+    );
+    expect(collapsed.find('.vibe-examples-btn').length).toBe(0);
+});
+
+test('clicking the examples button calls onToggleExamples', () => {
+    const onToggleExamples = jest.fn();
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} onToggleExamples={onToggleExamples} />
+    );
+    wrapper.find('.vibe-examples-btn').first().simulate('click');
+    expect(onToggleExamples).toHaveBeenCalled();
+});

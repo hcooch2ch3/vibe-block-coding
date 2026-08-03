@@ -86,6 +86,11 @@ const messages = defineMessages({
         defaultMessage: 'Say hello',
         description: 'Example prompt chip: make the sprite say hello'
     },
+    toggleExamples: {
+        id: 'vibe.prompt.toggleExamples',
+        defaultMessage: 'Show examples',
+        description: 'Aria label/tooltip for the header button that shows example prompts'
+    },
     tryAgain: {
         id: 'vibe.prompt.tryAgain',
         defaultMessage: 'Try again',
@@ -220,6 +225,7 @@ const VibePromptComponent = props => {
         onKeyDraftChange, onInstructionDraftChange,
         onSubmitKey, onSubmitInstruction, onEditKey,
         onChipClick, onRetry,
+        onToggleExamples,
         collapsed, position, onToggleCollapse, onDragStop,
         turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
         canCancelKey, onCancelKey, size, onResizeStart,
@@ -412,6 +418,17 @@ const VibePromptComponent = props => {
                                     {busy ? '⏳' : '⚠️'}
                                 </span>
                             )}
+                            {hasKey && !collapsed && turns.length > 0 && (
+                                <button
+                                    aria-label={intl.formatMessage(messages.toggleExamples)}
+                                    className={classNames(styles.bulb, 'vibe-no-drag', 'vibe-examples-btn')}
+                                    type="button"
+                                    title={intl.formatMessage(messages.toggleExamples)}
+                                    onClick={onToggleExamples}
+                                >
+                                    {'💡'}
+                                </button>
+                            )}
                             {hasKey && (
                                 <button
                                     aria-label={intl.formatMessage(messages.resetKey)}
@@ -493,6 +510,7 @@ VibePromptComponent.propTypes = {
     onSubmitInstruction: PropTypes.func.isRequired,
     onSubmitKey: PropTypes.func.isRequired,
     onToggleCollapse: PropTypes.func.isRequired,
+    onToggleExamples: PropTypes.func,
     position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number}),
     size: PropTypes.shape({w: PropTypes.number, h: PropTypes.number}),
     turns: PropTypes.array,

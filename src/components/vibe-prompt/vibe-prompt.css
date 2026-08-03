@@ -45,6 +45,11 @@
 .headerTitle {
     font-weight: bold;
     font-size: 0.85rem;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .headerActions {
@@ -121,6 +126,25 @@
     background: transparent;
     color: white;
     font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* Header button that summons the examples sheet — a soft-tinted pill so a
+   pre-reading child can tell it apart from the bare ⚙️/▾ glyph buttons. */
+.bulb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    height: 1.5rem;
+    margin-right: 0.25rem;
+    padding: 0 0.4rem;
+    border: none;
+    border-radius: 0.6rem;
+    background: rgba(255, 255, 255, 0.28);
+    color: white;
+    font-size: 0.95rem;
     line-height: 1;
     cursor: pointer;
 }
