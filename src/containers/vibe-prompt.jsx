@@ -44,6 +44,7 @@ class VibePrompt extends React.Component {
             'handleDragStop',
             'handleResize',
             'handleClearHistory',
+            'handleToggleExamples',
             'handleEditKey',
             'handleBackFromKey',
             'handleResizeStart',
@@ -92,7 +93,8 @@ class VibePrompt extends React.Component {
             collapsed,
             position,
             size,
-            turns
+            turns,
+            examplesOpen: false
         };
     }
     componentDidMount () {
@@ -136,9 +138,8 @@ class VibePrompt extends React.Component {
         this.setState({instructionDraft: e.target.value, error: false});
     }
     handleChipClick (text) {
-        // Fill only — never auto-run. The child owns pressing Send (educational,
-        // avoids accidental API spend, two-tap demo). Clear any stale error.
-        this.setState({instructionDraft: text, error: false});
+        // Fill only — never auto-run. Picking an example also closes the sheet.
+        this.setState({instructionDraft: text, error: false, examplesOpen: false});
     }
     handleSubmitKey (e) {
         e.preventDefault();
@@ -174,8 +175,16 @@ class VibePrompt extends React.Component {
             // the container calls saveKey — no explicit storage arg. Carry size so
             // a collapse/drag never drops a stored width/height.
             savePrefs({...position, collapsed, w: prevState.size.w, h: prevState.size.h});
-            return {collapsed, position};
+            return {collapsed, position, examplesOpen: false};
         });
+    }
+    handleToggleExamples () {
+        // Transient UI flag for the floating examples sheet (history view only).
+        // Not persisted — the empty-chat welcome is derived from turns.length.
+        // Reset to false by chip-pick / submit / clear / collapse; a card DRAG
+        // deliberately keeps it open (a non-destructive reposition — the sheet
+        // lives inside the card body and moves with it).
+        this.setState(prevState => ({examplesOpen: !prevState.examplesOpen}));
     }
     handleDragStop (e, data) {
         // react-draggable already applied bounds="parent" for live drag; persist
@@ -316,7 +325,7 @@ class VibePrompt extends React.Component {
     }
     handleClearHistory () {
         saveChat([]);
-        this.setState({turns: []});
+        this.setState({turns: [], examplesOpen: false});
     }
     handleSubmitInstruction (e) {
         e.preventDefault();
@@ -333,7 +342,7 @@ class VibePrompt extends React.Component {
         this.setState(prev => {
             const turns = prev.turns.concat(userTurn);
             saveChat(turns);
-            return {turns, instructionDraft: ''};
+            return {turns, instructionDraft: '', examplesOpen: false};
         });
         this.runProposeFor(instruction, targetId);
     }
@@ -437,6 +446,8 @@ class VibePrompt extends React.Component {
                 onContextTurnsChange={this.handleContextTurnsChange}
                 onRetry={this.handleRetry}
                 onToggleCollapse={this.handleToggleCollapse}
+                onToggleExamples={this.handleToggleExamples}
+                examplesOpen={this.state.examplesOpen}
                 onDragStop={this.handleDragStop}
                 onResizeStart={this.handleResizeStart}
                 onSubmitInstruction={this.handleSubmitInstruction}

@@ -402,9 +402,11 @@ describe('VibePrompt container', () => {
             const vm = makeVm({});
             const wrapper = render(vm);
             wrapper.setState({error: true, instructionDraft: ''});
+            wrapper.instance().handleToggleExamples();                       //+ open the sheet
             wrapper.instance().handleChipClick('Walk around');
             expect(wrapper.instance().state.instructionDraft).toBe('Walk around');
             expect(wrapper.instance().state.error).toBe(false);
+            expect(wrapper.instance().state.examplesOpen).toBe(false);       //+ chip pick closes it
         });
 
         test('handleChipClick does not send a request (fill only)', async () => {
@@ -564,8 +566,10 @@ describe('VibePrompt container', () => {
             const saveSpy = jest.spyOn(uiPrefs, 'savePrefs').mockReturnValue(true);
             const wrapper = render(vm);
             const before = wrapper.instance().state.collapsed;
+            wrapper.instance().handleToggleExamples();                       //+ open the sheet
             wrapper.instance().handleToggleCollapse();
             expect(wrapper.instance().state.collapsed).toBe(!before);
+            expect(wrapper.instance().state.examplesOpen).toBe(false);       //+ collapse closes it
             expect(saveSpy).toHaveBeenCalled();
         });
 
@@ -672,8 +676,10 @@ describe('VibePrompt container', () => {
             ]);
             const saveSpy = jest.spyOn(chatStore, 'saveChat').mockReturnValue(true);
             const wrapper = render(vm);
+            wrapper.instance().handleToggleExamples();                       //+ open the sheet
             wrapper.instance().handleClearHistory();
             expect(wrapper.instance().state.turns).toEqual([]);
+            expect(wrapper.instance().state.examplesOpen).toBe(false);       //+ clear closes it
             expect(saveSpy).toHaveBeenCalledWith([]);
         });
     });
@@ -720,6 +726,29 @@ describe('VibePrompt container', () => {
                 </Provider>
             );
             expect(wrapper.find('VibePrompt').prop('vm')).toBe(vm);
+        });
+    });
+
+    describe('examples sheet', () => {
+        test('examplesOpen defaults false and handleToggleExamples flips it', () => {
+            const inst = render(makeVm({})).instance();
+            expect(inst.state.examplesOpen).toBe(false);
+            inst.handleToggleExamples();
+            expect(inst.state.examplesOpen).toBe(true);
+            inst.handleToggleExamples();
+            expect(inst.state.examplesOpen).toBe(false);
+        });
+
+        test('submitting an instruction closes an open sheet', async () => {
+            const vm = makeVm({});
+            jest.spyOn(devConsole, 'propose')
+                .mockImplementation(() => Promise.resolve({answer: 'ok', proposal: makeProposal()}));
+            const wrapper = render(vm);
+            wrapper.instance().handleToggleExamples();            // open
+            wrapper.setState({instructionDraft: 'make the cat walk'});
+            wrapper.instance().handleSubmitInstruction(noopEvent);
+            await flushPromises();
+            expect(wrapper.instance().state.examplesOpen).toBe(false);
         });
     });
 });
