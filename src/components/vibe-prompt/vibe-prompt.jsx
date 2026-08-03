@@ -96,6 +96,21 @@ const messages = defineMessages({
         defaultMessage: 'Try again',
         description: 'Button to retry the last request after an error'
     },
+    sheetCaption: {
+        id: 'vibe.prompt.sheetCaption',
+        defaultMessage: 'Try saying…',
+        description: 'Caption at the top of the floating examples sheet'
+    },
+    sheetClose: {
+        id: 'vibe.prompt.sheetClose',
+        defaultMessage: 'Close examples',
+        description: 'Aria label for the examples sheet ✕ close button'
+    },
+    dismissExamples: {
+        id: 'vibe.prompt.dismissExamples',
+        defaultMessage: 'Dismiss examples',
+        description: 'Aria label for the dim overlay behind the sheet (tap to dismiss)'
+    },
     welcomeTitle: {
         id: 'vibe.prompt.welcomeTitle',
         defaultMessage: 'What should we make?',
@@ -205,6 +220,105 @@ WelcomeExamples.propTypes = {
     onChipClick: PropTypes.func.isRequired
 };
 
+// On-demand examples surface for the history view. A dialog that floats over the
+// conversation area (never the composer): Escape closes, focus enters on open and
+// returns to the opener (💡) on close, Tab is trapped inside. Manual bind (no
+// bindAll import) to match ChipButton.
+// eslint-config-scratch's react/no-multi-comp allows stateless components but not a
+// second CLASS in one file; ChipButton is already a class, so disable it just here.
+// eslint-disable-next-line react/no-multi-comp
+class ExampleSheet extends React.Component {
+    constructor (props) {
+        super(props);
+        this.handleKeyDown = this.handleKeyDown.bind(this);
+        this.setSheetRef = this.setSheetRef.bind(this);
+        this.sheetRef = null;
+        this.prevFocus = null;
+    }
+    componentDidMount () {
+        this.prevFocus = document.activeElement;
+        if (this.sheetRef) this.sheetRef.focus();
+        document.addEventListener('keydown', this.handleKeyDown);
+    }
+    componentWillUnmount () {
+        document.removeEventListener('keydown', this.handleKeyDown);
+        // Return focus to whatever was focused when the sheet opened (the 💡 button).
+        // Guard: on the clear-history path the 💡 opener unmounts in the SAME commit,
+        // so prevFocus can be detached — only refocus if it's still in the document.
+        if (this.prevFocus && document.contains(this.prevFocus) && this.prevFocus.focus) {
+            this.prevFocus.focus();
+        }
+    }
+    handleKeyDown (e) {
+        if (e.key === 'Escape') {
+            // stopPropagation so a card-level / scratch-gui ancestor Escape handler
+            // (e.g. browser fullscreen exit) doesn't also fire on the same keypress.
+            e.stopPropagation();
+            this.props.onClose();
+            return;
+        }
+        if (e.key === 'Tab' && this.sheetRef) {
+            // :not([disabled]) so a busy-disabled chip is never a trap edge (focus()
+            // on a disabled button is a no-op and would make Tab feel dead).
+            const f = this.sheetRef.querySelectorAll('button:not([disabled])');
+            if (!f.length) return;
+            const first = f[0];
+            const last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    }
+    setSheetRef (el) {
+        this.sheetRef = el;
+    }
+    render () {
+        const {intl, onClose, onChipClick, busy} = this.props;
+        return (
+            <React.Fragment>
+                <button
+                    aria-label={intl.formatMessage(messages.dismissExamples)}
+                    className={styles.sheetOverlay}
+                    type="button"
+                    tabIndex={-1}
+                    onClick={onClose}
+                />
+                <div
+                    className={classNames(styles.sheet, 'vibe-example-sheet')}
+                    role="dialog"
+                    aria-label={intl.formatMessage(messages.sheetCaption)}
+                    tabIndex={-1}
+                    ref={this.setSheetRef}
+                >
+                    <div className={styles.sheetCap}>
+                        <span>{intl.formatMessage(messages.sheetCaption)} {'✨'}</span>
+                        <button
+                            aria-label={intl.formatMessage(messages.sheetClose)}
+                            className={styles.sheetClose}
+                            type="button"
+                            onClick={onClose}
+                        >
+                            {'✕'}
+                        </button>
+                    </div>
+                    {renderExampleChips(intl, onChipClick, busy)}
+                </div>
+            </React.Fragment>
+        );
+    }
+}
+
+ExampleSheet.propTypes = {
+    busy: PropTypes.bool,
+    intl: intlShape.isRequired,
+    onChipClick: PropTypes.func.isRequired,
+    onClose: PropTypes.func.isRequired
+};
+
 // Every edge + corner is a resize grip. Corners come last so they paint over the
 // edge strips they overlap. Class names are camelCase to survive css-loader's
 // locals conversion (bracket access on underscore names is not portable).
@@ -225,7 +339,7 @@ const VibePromptComponent = props => {
         onKeyDraftChange, onInstructionDraftChange,
         onSubmitKey, onSubmitInstruction, onEditKey,
         onChipClick, onRetry,
-        onToggleExamples,
+        onToggleExamples, examplesOpen,
         collapsed, position, onToggleCollapse, onDragStop,
         turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
         canCancelKey, onCancelKey, size, onResizeStart,
@@ -324,6 +438,14 @@ const VibePromptComponent = props => {
                         onIgnore={onIgnore}
                         onRebuild={onRebuild}
                         onMakeIt={onMakeIt}
+                    />
+                )}
+                {examplesOpen && turns.length > 0 && (
+                    <ExampleSheet
+                        intl={intl}
+                        busy={busy}
+                        onClose={onToggleExamples}
+                        onChipClick={onChipClick}
                     />
                 )}
             </div>
@@ -489,6 +611,7 @@ VibePromptComponent.propTypes = {
     collapsed: PropTypes.bool,
     contextTurns: PropTypes.number,
     error: PropTypes.bool,
+    examplesOpen: PropTypes.bool,
     hasKey: PropTypes.bool,
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,

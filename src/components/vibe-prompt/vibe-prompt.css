@@ -230,6 +230,59 @@
     cursor: default;
 }
 
+/* Dim behind the sheet — covers the conversation region only (its parent
+   .convArea), never the composer. A real button so the click-to-dismiss stays
+   keyboard/lint clean; tabIndex -1 keeps it out of the tab order. */
+.sheetOverlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    padding: 0;
+    border: none;
+    background: rgba(20, 30, 50, 0.28);
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+
+/* Examples sheet — floats just above the composer inside .convArea, so opening
+   it never reflows the history or pushes the composer (complaint B: placement). */
+.sheet {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 11;
+    padding: 0.625rem 0.75rem 0.75rem;
+    background: white;
+    border: 1px solid #d9e3f0;
+    border-radius: 0.875rem;
+    box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.18);
+    animation: vibe-appear 160ms ease-out;
+}
+
+.sheetCap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.76rem;
+    font-weight: bold;
+    color: #7d8397;
+}
+
+.sheetClose {
+    border: none;
+    background: transparent;
+    color: #b3bcc8;
+    font-size: 0.9rem;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+}
+
 .retry {
     margin-left: 0.5rem;
     padding: 0.125rem 0.5rem;
@@ -274,7 +327,9 @@
 @media (prefers-reduced-motion: reduce) {
     .dots > span,
     .userBubble,
-    .aiBubble {
+    .aiBubble,
+    .exampleChip,
+    .sheet {
         animation: none;
     }
 }

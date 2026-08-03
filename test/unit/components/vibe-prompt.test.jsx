@@ -81,3 +81,82 @@ test('clicking the examples button calls onToggleExamples', () => {
     wrapper.find('.vibe-examples-btn').first().simulate('click');
     expect(onToggleExamples).toHaveBeenCalled();
 });
+
+test('the examples sheet renders only when open AND history exists', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const closed = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen={false} />
+    );
+    expect(closed.find('.vibe-example-sheet').length).toBe(0);
+    closed.unmount();
+
+    const open = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
+    );
+    expect(open.find('.vibe-example-sheet').length).toBe(1);
+    expect(open.find('.vibe-example-chip').hostNodes().length).toBe(3);   // chips live in the sheet
+    open.unmount();
+
+    const openEmpty = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={[]} examplesOpen />
+    );
+    expect(openEmpty.find('.vibe-example-sheet').length).toBe(0);   // no sheet without history
+    openEmpty.unmount();
+});
+
+test('the ✕, the dim overlay, and Escape each close the sheet', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    // The overlay and the ✕ carry DISTINCT aria-labels so each is uniquely selectable.
+    const openSheet = () => {
+        const onToggleExamples = jest.fn();
+        const wrapper = mountWithIntl(
+            <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
+        );
+        return {wrapper, onToggleExamples};
+    };
+
+    const x = openSheet();
+    x.wrapper.find('button[aria-label="Close examples"]').first().simulate('click'); // the ✕
+    expect(x.onToggleExamples).toHaveBeenCalledTimes(1);
+    x.wrapper.unmount();
+
+    const dim = openSheet();
+    dim.wrapper.find('button[aria-label="Dismiss examples"]').first().simulate('click'); // the overlay
+    expect(dim.onToggleExamples).toHaveBeenCalledTimes(1);
+    dim.wrapper.unmount();
+
+    const esc = openSheet();
+    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+    expect(esc.onToggleExamples).toHaveBeenCalledTimes(1);
+    esc.wrapper.unmount(); // detach the document keydown listener
+});
+
+test('the open sheet is an accessible non-modal dialog (role, focusable)', () => {
+    // Focus MOVEMENT (into the sheet on open, back to 💡 on close) is NOT asserted
+    // here: mountWithIntl mounts detached (no attachTo), so document.activeElement
+    // does not track — that behavior is covered by Task 5 manual QA. This test locks
+    // the a11y STRUCTURE so it can't silently regress.
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
+    );
+    const sheet = wrapper.find('.vibe-example-sheet').first();
+    expect(sheet.prop('role')).toBe('dialog');
+    // NON-modal on purpose: the composer stays interactive under the sheet, so we must
+    // NOT claim aria-modal (it would tell assistive tech the live composer is inert).
+    expect(sheet.prop('aria-modal')).toBeUndefined();
+    expect(sheet.prop('tabIndex')).toBe(-1);
+    wrapper.unmount();
+});
+
+test('the composer stays usable while the examples sheet is open', () => {
+    // Complaint-B invariant: the sheet floats over the conversation area only; the
+    // composer input is never disabled or covered by the sheet (busy is false here).
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
+    );
+    expect(wrapper.find('.vibe-example-sheet').length).toBe(1);
+    expect(wrapper.find('input').first().prop('disabled')).toBeFalsy();
+    wrapper.unmount();
+});
