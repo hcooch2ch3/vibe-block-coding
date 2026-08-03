@@ -30,3 +30,6 @@ npm-*
 
 # Local AI working notes (private — not part of the public fork)
 .claude/
+
+# Superpowers brainstorm/visual-companion scratch artifacts (local only)
+.superpowers/
