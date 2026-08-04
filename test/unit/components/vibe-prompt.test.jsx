@@ -104,9 +104,8 @@ test('the examples sheet renders only when open AND history exists', () => {
     openEmpty.unmount();
 });
 
-test('the ✕, the dim overlay, and Escape each close the sheet', () => {
+test('the ✕ and Escape each close the examples panel', () => {
     const turns = [{id: 0, role: 'user', text: 'hi'}];
-    // The overlay and the ✕ carry DISTINCT aria-labels so each is uniquely selectable.
     const openSheet = () => {
         const onToggleExamples = jest.fn();
         const wrapper = mountWithIntl(
@@ -120,30 +119,24 @@ test('the ✕, the dim overlay, and Escape each close the sheet', () => {
     expect(x.onToggleExamples).toHaveBeenCalledTimes(1);
     x.wrapper.unmount();
 
-    const dim = openSheet();
-    dim.wrapper.find('button[aria-label="Dismiss examples"]').first().simulate('click'); // the overlay
-    expect(dim.onToggleExamples).toHaveBeenCalledTimes(1);
-    dim.wrapper.unmount();
-
     const esc = openSheet();
     document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
     expect(esc.onToggleExamples).toHaveBeenCalledTimes(1);
     esc.wrapper.unmount(); // detach the document keydown listener
 });
 
-test('the open sheet is an accessible non-modal dialog (role, focusable)', () => {
-    // Focus MOVEMENT (into the sheet on open, back to 💡 on close) is NOT asserted
+test('the open examples panel is a labeled, focusable inline group', () => {
+    // Focus MOVEMENT (into the panel on open, back to 💡 on close) is NOT asserted
     // here: mountWithIntl mounts detached (no attachTo), so document.activeElement
-    // does not track — that behavior is covered by Task 5 manual QA. This test locks
-    // the a11y STRUCTURE so it can't silently regress.
+    // does not track — that behavior is covered by manual QA. This test locks the
+    // a11y STRUCTURE so it can't silently regress.
     const turns = [{id: 0, role: 'user', text: 'hi'}];
     const wrapper = mountWithIntl(
         <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
     );
     const sheet = wrapper.find('.vibe-example-sheet').first();
-    expect(sheet.prop('role')).toBe('dialog');
-    // NON-modal on purpose: the composer stays interactive under the sheet, so we must
-    // NOT claim aria-modal (it would tell assistive tech the live composer is inert).
+    // Inline disclosure (A2), not a modal dialog: role=group, never aria-modal.
+    expect(sheet.prop('role')).toBe('group');
     expect(sheet.prop('aria-modal')).toBeUndefined();
     expect(sheet.prop('tabIndex')).toBe(-1);
     wrapper.unmount();

@@ -230,36 +230,17 @@
     cursor: default;
 }
 
-/* Dim behind the sheet — covers the conversation region only (its parent
-   .convArea), never the composer. A real button so the click-to-dismiss stays
-   keyboard/lint clean; tabIndex -1 keeps it out of the tab order. */
-.sheetOverlay {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 10;
-    padding: 0;
-    border: none;
-    background: rgba(20, 30, 50, 0.28);
-    border-radius: 0.5rem;
-    cursor: pointer;
-}
-
-/* Examples sheet — floats just above the composer inside .convArea, so opening
-   it never reflows the history or pushes the composer (complaint B: placement). */
+/* Examples panel (A2) — an INLINE row that appears just above the composer when
+   the 💡 button is pressed, pushing the conversation up (no floating, no dim). It
+   is a sibling of .convArea in the flex-column body, so .convArea shrinks to make
+   room and the composer stays pinned at the bottom via .composerAnchor. */
 .sheet {
-    position: absolute;
-    left: 0.5rem;
-    right: 0.5rem;
-    bottom: 0.5rem;
-    z-index: 11;
-    padding: 0.625rem 0.75rem 0.75rem;
-    background: white;
-    border: 1px solid #d9e3f0;
-    border-radius: 0.875rem;
-    box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.18);
+    flex: 0 0 auto;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.625rem 0.625rem;
+    background: #f7fbff;
+    border: 1px solid #dcebff;
+    border-radius: 0.75rem;
     animation: vibe-appear 160ms ease-out;
 }
 
