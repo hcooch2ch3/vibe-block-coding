@@ -138,8 +138,10 @@ class VibePrompt extends React.Component {
         this.setState({instructionDraft: e.target.value, error: false});
     }
     handleChipClick (text) {
-        // Fill only — never auto-run. Picking an example also closes the sheet.
-        this.setState({instructionDraft: text, error: false, examplesOpen: false});
+        // One-tap: an example chip fills AND sends immediately (auto-submit). The
+        // shared submit path appends the user turn, clears the draft, and closes the
+        // examples sheet. A busy request is the only thing that makes this a no-op.
+        this.submitInstruction(text);
     }
     handleSubmitKey (e) {
         e.preventDefault();
@@ -329,22 +331,27 @@ class VibePrompt extends React.Component {
     }
     handleSubmitInstruction (e) {
         e.preventDefault();
-        const instruction = this.state.instructionDraft.trim();
+        this.submitInstruction(this.state.instructionDraft);
+    }
+    // Shared send path for the composer form AND one-tap example chips. Appends a
+    // user turn, clears the draft, closes the examples sheet, and kicks off propose.
+    submitInstruction (instruction) {
+        const text = (instruction || '').trim();
         const vm = this.props.vm;
-        if (!instruction || this.state.busy || !this.state.apiKey || !vm || !vm.editingTarget) return;
+        if (!text || this.state.busy || !this.state.apiKey || !vm || !vm.editingTarget) return;
         // Pin the sprite NOW; propose/apply use this id even if the child switches
         // sprites mid-request. A deleted pinned sprite → propose throws → error.
         const targetId = vm.editingTarget.id;
-        // Submit ONLY appends a user turn; it never injects and never stopAll()s
-        // (that moved into applyProposal). Clear the draft immediately so the child
-        // sees their message land and can't double-submit the same text.
-        const userTurn = {id: this.nextId++, role: 'user', text: instruction};
+        // Append ONLY a user turn; never injects and never stopAll()s (that moved into
+        // applyProposal). Clear the draft immediately so the child sees their message
+        // land and can't double-submit the same text.
+        const userTurn = {id: this.nextId++, role: 'user', text};
         this.setState(prev => {
             const turns = prev.turns.concat(userTurn);
             saveChat(turns);
             return {turns, instructionDraft: '', examplesOpen: false};
         });
-        this.runProposeFor(instruction, targetId);
+        this.runProposeFor(text, targetId);
     }
     handleApply (turn) {
         // HARD GATE 1 — single-flight: a synchronous instance flag so two Apply

@@ -398,25 +398,32 @@ describe('VibePrompt container', () => {
     });
 
     describe('example chips', () => {
-        test('clicking a chip fills the instruction draft and clears error', () => {
-            const vm = makeVm({});
-            const wrapper = render(vm);
-            wrapper.setState({error: true, instructionDraft: ''});
-            wrapper.instance().handleToggleExamples();                       //+ open the sheet
-            wrapper.instance().handleChipClick('Walk around');
-            expect(wrapper.instance().state.instructionDraft).toBe('Walk around');
-            expect(wrapper.instance().state.error).toBe(false);
-            expect(wrapper.instance().state.examplesOpen).toBe(false);       //+ chip pick closes it
-        });
-
-        test('handleChipClick does not send a request (fill only)', async () => {
+        test('clicking a chip sends it immediately (one-tap), clears error, closes the sheet', async () => {
             const vm = makeVm({});
             const proposeSpy = jest.spyOn(devConsole, 'propose')
-                .mockImplementation(() => Promise.resolve({answer: 'ok'}));
+                .mockImplementation(() => Promise.resolve({answer: 'ok', proposal: makeProposal()}));
+            const wrapper = render(vm);
+            wrapper.setState({error: true});
+            wrapper.instance().handleToggleExamples();                       // open the sheet
+            wrapper.instance().handleChipClick('Walk around');
+            await flushPromises();
+            const inst = wrapper.instance();
+            expect(inst.state.turns.some(t => t.role === 'user' && t.text === 'Walk around')).toBe(true);
+            expect(inst.state.instructionDraft).toBe('');                     // sent → draft cleared
+            expect(inst.state.error).toBe(false);
+            expect(inst.state.examplesOpen).toBe(false);                     // chip send closes the sheet
+            expect(proposeSpy).toHaveBeenCalledTimes(1);
+        });
+
+        test('handleChipClick auto-sends the chip text (propose called once)', async () => {
+            const vm = makeVm({});
+            const proposeSpy = jest.spyOn(devConsole, 'propose')
+                .mockImplementation(() => Promise.resolve({answer: 'ok', proposal: makeProposal()}));
             const wrapper = render(vm);
             wrapper.instance().handleChipClick('Say hello');
             await flushPromises();
-            expect(proposeSpy).not.toHaveBeenCalled();
+            expect(proposeSpy).toHaveBeenCalledTimes(1);
+            expect(wrapper.instance().state.turns.some(t => t.text === 'Say hello')).toBe(true);
         });
     });
 

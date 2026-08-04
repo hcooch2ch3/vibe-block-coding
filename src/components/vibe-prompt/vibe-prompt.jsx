@@ -145,7 +145,7 @@ const messages = defineMessages({
 
 // A chip is its own component with a bound handler so the mapped list needs no
 // inline arrow in JSX (project lint forbids react/jsx-no-bind). It reports its
-// filled sentence back up via onClick(label) — fill only, never auto-run.
+// sentence back up via onClick(label); the container sends it immediately (one-tap).
 class ChipButton extends React.Component {
     constructor (props) {
         super(props);
