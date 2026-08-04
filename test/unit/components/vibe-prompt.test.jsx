@@ -104,44 +104,83 @@ test('the examples sheet renders only when open AND history exists', () => {
     openEmpty.unmount();
 });
 
-test('Escape closes the examples panel', () => {
-    // The A2 panel has no ✕ (matches the mockup); it closes via the header 💡 toggle
-    // (covered by the header-button test) or the Escape key.
+test('the scrim tap and Escape each close the examples panel', () => {
     const turns = [{id: 0, role: 'user', text: 'hi'}];
-    const onToggleExamples = jest.fn();
-    const wrapper = mountWithIntl(
-        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
-    );
+    const openSheet = () => {
+        const onToggleExamples = jest.fn();
+        const wrapper = mountWithIntl(
+            <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
+        );
+        return {wrapper, onToggleExamples};
+    };
+
+    const s = openSheet();
+    s.wrapper.find('button[aria-label="Dismiss examples"]').first().simulate('click'); // the scrim
+    expect(s.onToggleExamples).toHaveBeenCalledTimes(1);
+    s.wrapper.unmount();
+
+    const esc = openSheet();
     document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
-    expect(onToggleExamples).toHaveBeenCalledTimes(1);
-    wrapper.unmount(); // detach the document keydown listener
+    expect(esc.onToggleExamples).toHaveBeenCalledTimes(1);
+    esc.wrapper.unmount();
 });
 
-test('the open examples panel is a labeled, focusable inline group', () => {
-    // Focus MOVEMENT (into the panel on open, back to 💡 on close) is NOT asserted
-    // here: mountWithIntl mounts detached (no attachTo), so document.activeElement
-    // does not track — that behavior is covered by manual QA. This test locks the
-    // a11y STRUCTURE so it can't silently regress.
+test('the open bottom sheet is a modal dialog (role, aria-modal, focusable)', () => {
     const turns = [{id: 0, role: 'user', text: 'hi'}];
     const wrapper = mountWithIntl(
         <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
     );
     const sheet = wrapper.find('.vibe-example-sheet').first();
-    // Inline disclosure (A2), not a modal dialog: role=group, never aria-modal.
-    expect(sheet.prop('role')).toBe('group');
-    expect(sheet.prop('aria-modal')).toBeUndefined();
+    // B2 covers the composer, so it IS modal now.
+    expect(sheet.prop('role')).toBe('dialog');
+    expect(sheet.prop('aria-modal')).toBe('true');
     expect(sheet.prop('tabIndex')).toBe(-1);
     wrapper.unmount();
 });
 
-test('the composer stays usable while the examples sheet is open', () => {
-    // Complaint-B invariant: the sheet floats over the conversation area only; the
-    // composer input is never disabled or covered by the sheet (busy is false here).
+test('dragging the grabber down past the threshold closes the sheet', () => {
     const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const onToggleExamples = jest.fn();
     const wrapper = mountWithIntl(
-        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen />
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
     );
-    expect(wrapper.find('.vibe-example-sheet').length).toBe(1);
-    expect(wrapper.find('input').first().prop('disabled')).toBeFalsy();
+    wrapper.find('.vibe-sheet-grabber').first().simulate('mousedown', {clientY: 100});
+    window.dispatchEvent(new MouseEvent('mousemove', {clientY: 200})); // +100px (> 72)
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    // Exactly once matters: onClose is a TOGGLE (handleToggleExamples), so a double-fire
+    // would REOPEN the sheet, not just no-op.
+    expect(onToggleExamples).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+});
+
+test('a touch drag on the grabber past the threshold closes the sheet', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const onToggleExamples = jest.fn();
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
+    );
+    // touchstart carries its point in touches[0]; cancelable so the emulated-mouse guard
+    // (preventDefault) runs, proving the touch branch — not just the mouse path.
+    wrapper.find('.vibe-sheet-grabber').first().simulate('touchstart', {
+        cancelable: true, preventDefault () {}, touches: [{clientY: 100}]
+    });
+    const move = new Event('touchmove', {cancelable: true});
+    move.touches = [{clientY: 200}]; // +100px (> 72)
+    window.dispatchEvent(move);
+    window.dispatchEvent(new Event('touchend'));
+    expect(onToggleExamples).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+});
+
+test('a small grabber drag snaps back and does NOT close', () => {
+    const turns = [{id: 0, role: 'user', text: 'hi'}];
+    const onToggleExamples = jest.fn();
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
+    );
+    wrapper.find('.vibe-sheet-grabber').first().simulate('mousedown', {clientY: 100});
+    window.dispatchEvent(new MouseEvent('mousemove', {clientY: 130})); // +30px (< 72)
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(onToggleExamples).not.toHaveBeenCalled();
     wrapper.unmount();
 });

@@ -99,7 +99,12 @@ const messages = defineMessages({
     sheetCaption: {
         id: 'vibe.prompt.sheetCaption',
         defaultMessage: 'Try saying…',
-        description: 'Caption at the top of the floating examples sheet'
+        description: 'Caption at the top of the examples bottom sheet'
+    },
+    dismissExamples: {
+        id: 'vibe.prompt.dismissExamples',
+        defaultMessage: 'Dismiss examples',
+        description: 'Aria label for the scrim behind the bottom sheet (tap to dismiss)'
     },
     welcomeTitle: {
         id: 'vibe.prompt.welcomeTitle',
@@ -210,10 +215,11 @@ WelcomeExamples.propTypes = {
     onChipClick: PropTypes.func.isRequired
 };
 
-// On-demand examples panel for the history view (A2): an INLINE row rendered just
-// above the composer, pushing the conversation up (no floating, no dim overlay).
-// Escape closes; focus enters on open and returns to the opener (💡) on close; no
-// focus trap (Tab moves out to the composer). Manual bind (no bindAll) like ChipButton.
+// On-demand examples panel for the history view (B2): a MODAL BOTTOM SHEET that
+// covers the composer. Scrim tap / Escape / drag-down-past-72px / picking an example
+// all close the sheet. Focus enters the sheet on open and returns to the 💡 opener on
+// close. Tab is trapped inside so focus cannot reach the covered composer while the
+// sheet is open. Manual bind (no bindAll) like ChipButton.
 // eslint-config-scratch's react/no-multi-comp allows stateless components but not a
 // second CLASS in one file; ChipButton is already a class, so disable it just here.
 // eslint-disable-next-line react/no-multi-comp
@@ -222,51 +228,143 @@ class ExampleSheet extends React.Component {
         super(props);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.setSheetRef = this.setSheetRef.bind(this);
+        this.handleDragStart = this.handleDragStart.bind(this);
+        this.handleDragMove = this.handleDragMove.bind(this);
+        this.handleDragEnd = this.handleDragEnd.bind(this);
         this.sheetRef = null;
         this.prevFocus = null;
+        this.dragStartY = null;
+        this.state = {dragY: 0, dragging: false};
     }
     componentDidMount () {
         this.prevFocus = document.activeElement;
-        if (this.sheetRef) this.sheetRef.focus();
+        // Focus the first enabled control in the sheet (fall back to the sheet
+        // container) so the modal Tab-trap has a stable first edge and shift+Tab can't
+        // slip back to the covered conversation.
+        const focusables = this.sheetRef && this.sheetRef.querySelectorAll('button:not([disabled])');
+        if (focusables && focusables.length) {
+            focusables[0].focus();
+        } else if (this.sheetRef) {
+            this.sheetRef.focus();
+        }
         document.addEventListener('keydown', this.handleKeyDown);
     }
     componentWillUnmount () {
         document.removeEventListener('keydown', this.handleKeyDown);
-        // Return focus to whatever was focused when the sheet opened (the 💡 button).
-        // Guard: on the clear-history path the 💡 opener unmounts in the SAME commit,
-        // so prevFocus can be detached — only refocus if it's still in the document.
+        this.removeDragListeners();
+        // Restore focus to the opener (💡). Guard: on clear-history the opener unmounts
+        // in the same commit, so prevFocus may be detached — only refocus if still live.
         if (this.prevFocus && document.contains(this.prevFocus) && this.prevFocus.focus) {
             this.prevFocus.focus();
         }
     }
+    removeDragListeners () {
+        window.removeEventListener('mousemove', this.handleDragMove);
+        window.removeEventListener('mouseup', this.handleDragEnd);
+        window.removeEventListener('touchmove', this.handleDragMove);
+        window.removeEventListener('touchend', this.handleDragEnd);
+        window.removeEventListener('touchcancel', this.handleDragEnd);
+    }
     handleKeyDown (e) {
         if (e.key === 'Escape') {
-            // stopPropagation so a card-level / scratch-gui ancestor Escape handler
-            // (e.g. browser fullscreen exit) doesn't also fire on the same keypress.
+            // stopPropagation so an ancestor Escape handler (e.g. fullscreen exit) does
+            // not also fire on the same keypress.
             e.stopPropagation();
             this.props.onClose();
+            return;
         }
-        // No Tab-trap: the panel is inline (A2), so Tab should move OUT to the
-        // composer naturally rather than being captured.
+        // Modal bottom sheet: trap Tab inside so focus can't reach the covered composer.
+        if (e.key === 'Tab' && this.sheetRef) {
+            const f = this.sheetRef.querySelectorAll('button:not([disabled])');
+            if (!f.length) return;
+            const first = f[0];
+            const last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    }
+    handleDragStart (e) {
+        // Grab the grabber (mouse or touch) and follow the pointer downward.
+        // preventDefault suppresses the browser's emulated mouse events (mousedown→
+        // mouseup) after a touchstart so they don't re-enter here via onMouseDown and
+        // double-register the window listeners — the same guard the resize grips use.
+        // NOTE: relies on React 16 attaching touch listeners NON-passive; on a bump to
+        // React 17+ (passive-by-default) this must become a ref-based native touchstart.
+        if (e.cancelable) e.preventDefault();
+        const p = e.touches ? e.touches[0] : e;
+        if (!p) return;
+        this.dragStartY = p.clientY;
+        this.setState({dragging: true});
+        if (e.touches) {
+            window.addEventListener('touchmove', this.handleDragMove, {passive: false});
+            window.addEventListener('touchend', this.handleDragEnd);
+            window.addEventListener('touchcancel', this.handleDragEnd);
+        } else {
+            window.addEventListener('mousemove', this.handleDragMove);
+            window.addEventListener('mouseup', this.handleDragEnd);
+        }
+    }
+    handleDragMove (e) {
+        if (this.dragStartY === null) return;
+        const p = e.touches ? e.touches[0] : e;
+        if (!p) return;
+        if (e.touches && e.cancelable) e.preventDefault(); // block page scroll while dragging
+        const dy = Math.max(0, p.clientY - this.dragStartY); // downward only
+        this.setState({dragY: dy});
+    }
+    handleDragEnd () {
+        this.removeDragListeners();
+        const shouldClose = this.state.dragY > 72; // drag past ~72px closes
+        this.dragStartY = null;
+        if (shouldClose) {
+            this.props.onClose();
+        } else {
+            this.setState({dragY: 0, dragging: false}); // snap back
+        }
     }
     setSheetRef (el) {
         this.sheetRef = el;
     }
     render () {
-        const {intl, onChipClick, busy} = this.props;
+        const {intl, onClose, onChipClick, busy} = this.props;
+        const {dragY, dragging} = this.state;
+        const sheetStyle = dragY ? {transform: `translateY(${dragY}px)`} : null;
         return (
-            <div
-                className={classNames(styles.sheet, 'vibe-example-sheet')}
-                role="group"
-                aria-label={intl.formatMessage(messages.sheetCaption)}
-                tabIndex={-1}
-                ref={this.setSheetRef}
-            >
-                <div className={styles.sheetCap}>
-                    {intl.formatMessage(messages.sheetCaption)} {'✨'}
+            <React.Fragment>
+                <button
+                    aria-label={intl.formatMessage(messages.dismissExamples)}
+                    className={styles.sheetScrim}
+                    type="button"
+                    tabIndex={-1}
+                    onClick={onClose}
+                />
+                <div
+                    className={classNames(styles.sheet, dragging ? null : styles.sheetSnap, 'vibe-example-sheet')}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={intl.formatMessage(messages.sheetCaption)}
+                    tabIndex={-1}
+                    ref={this.setSheetRef}
+                    style={sheetStyle}
+                >
+                    <div
+                        className={classNames(styles.grabber, 'vibe-sheet-grabber')}
+                        onMouseDown={this.handleDragStart}
+                        onTouchStart={this.handleDragStart}
+                    >
+                        <span className={styles.grabberBar} />
+                    </div>
+                    <div className={styles.sheetCap}>
+                        {intl.formatMessage(messages.sheetCaption)} {'✨'}
+                    </div>
+                    {renderExampleChips(intl, onChipClick, busy)}
                 </div>
-                {renderExampleChips(intl, onChipClick, busy)}
-            </div>
+            </React.Fragment>
         );
     }
 }

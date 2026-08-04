@@ -165,9 +165,10 @@
     color: #e64d5f;
 }
 
-/* Conversation region (history OR welcome). position:relative so the examples
-   sheet + dim overlay (Task 4) anchor to THIS box only — never over the
-   composer below, which stays fully interactive. */
+/* Conversation region (history OR welcome). position:relative is kept as a defensive
+   containing block for any future convArea-internal absolutely-positioned child; the
+   B2 examples bottom sheet does NOT anchor here — it anchors to .card and deliberately
+   covers the composer. */
 .convArea {
     position: relative;
     display: flex;
@@ -230,17 +231,64 @@
     cursor: default;
 }
 
-/* Examples panel (A2) — an inserted BAND just above the composer, shown when the
-   💡 button is pressed, pushing the conversation up (no floating card, no dim). A
-   dashed top rule separates it from the history; negative side margins cancel the
-   .body padding so the band spans the full card width (clipped by card overflow). */
+/* Scrim behind the bottom sheet — dims the history below the header (kept at 40px =
+   HEADER_H so the 💡 stays reachable). A real button so tap-to-dismiss is lint-clean.
+   It also covers the resize grips, so the card can't be resized while the sheet is
+   open (expected for a modal). */
+.sheetScrim {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    padding: 0;
+    border: none;
+    background: rgba(20, 30, 50, 0.28);
+    cursor: pointer;
+}
+
+/* Bottom sheet (B2) — rises from the card's bottom edge (anchored to .card, the
+   nearest positioned ancestor), COVERING the composer; drag the grabber down to
+   close. .card overflow:hidden clips the slide-in and any drag past the edges. */
 .sheet {
-    flex: 0 0 auto;
-    margin: 0 -0.625rem;
-    padding: 0.5rem 0.75rem 0.625rem;
-    border-top: 1px dashed #dfe8f5;
-    background: #f8fbff;
-    animation: vibe-appear 160ms ease-out;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 7;
+    padding: 0 0.75rem 0.75rem;
+    background: #ffffff;
+    border-top-left-radius: 1rem;
+    border-top-right-radius: 1rem;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
+    animation: vibe-sheet-up 200ms ease-out;
+    will-change: transform;
+}
+
+/* Applied when NOT actively dragging, so a released (not-closed) drag animates back. */
+.sheetSnap {
+    transition: transform 180ms ease-out;
+}
+
+@keyframes vibe-sheet-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+}
+
+.grabber {
+    display: flex;
+    justify-content: center;
+    padding: 0.5rem 0 0.375rem;
+    cursor: grab;
+    touch-action: none;
+}
+
+.grabberBar {
+    width: 2.25rem;
+    height: 5px;
+    border-radius: 3px;
+    background: #d3dbe6;
 }
 
 .sheetCap {
@@ -298,6 +346,9 @@
     .exampleChip,
     .sheet {
         animation: none;
+    }
+    .sheetSnap {
+        transition: none;
     }
 }
 
