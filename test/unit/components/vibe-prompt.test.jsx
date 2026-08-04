@@ -104,25 +104,17 @@ test('the examples sheet renders only when open AND history exists', () => {
     openEmpty.unmount();
 });
 
-test('the ✕ and Escape each close the examples panel', () => {
+test('Escape closes the examples panel', () => {
+    // The A2 panel has no ✕ (matches the mockup); it closes via the header 💡 toggle
+    // (covered by the header-button test) or the Escape key.
     const turns = [{id: 0, role: 'user', text: 'hi'}];
-    const openSheet = () => {
-        const onToggleExamples = jest.fn();
-        const wrapper = mountWithIntl(
-            <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
-        );
-        return {wrapper, onToggleExamples};
-    };
-
-    const x = openSheet();
-    x.wrapper.find('button[aria-label="Close examples"]').first().simulate('click'); // the ✕
-    expect(x.onToggleExamples).toHaveBeenCalledTimes(1);
-    x.wrapper.unmount();
-
-    const esc = openSheet();
+    const onToggleExamples = jest.fn();
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
+    );
     document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
-    expect(esc.onToggleExamples).toHaveBeenCalledTimes(1);
-    esc.wrapper.unmount(); // detach the document keydown listener
+    expect(onToggleExamples).toHaveBeenCalledTimes(1);
+    wrapper.unmount(); // detach the document keydown listener
 });
 
 test('the open examples panel is a labeled, focusable inline group', () => {

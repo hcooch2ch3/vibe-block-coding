@@ -101,11 +101,6 @@ const messages = defineMessages({
         defaultMessage: 'Try saying…',
         description: 'Caption at the top of the floating examples sheet'
     },
-    sheetClose: {
-        id: 'vibe.prompt.sheetClose',
-        defaultMessage: 'Close examples',
-        description: 'Aria label for the examples sheet ✕ close button'
-    },
     welcomeTitle: {
         id: 'vibe.prompt.welcomeTitle',
         defaultMessage: 'What should we make?',
@@ -258,7 +253,7 @@ class ExampleSheet extends React.Component {
         this.sheetRef = el;
     }
     render () {
-        const {intl, onClose, onChipClick, busy} = this.props;
+        const {intl, onChipClick, busy} = this.props;
         return (
             <div
                 className={classNames(styles.sheet, 'vibe-example-sheet')}
@@ -268,15 +263,7 @@ class ExampleSheet extends React.Component {
                 ref={this.setSheetRef}
             >
                 <div className={styles.sheetCap}>
-                    <span>{intl.formatMessage(messages.sheetCaption)} {'✨'}</span>
-                    <button
-                        aria-label={intl.formatMessage(messages.sheetClose)}
-                        className={styles.sheetClose}
-                        type="button"
-                        onClick={onClose}
-                    >
-                        {'✕'}
-                    </button>
+                    {intl.formatMessage(messages.sheetCaption)} {'✨'}
                 </div>
                 {renderExampleChips(intl, onChipClick, busy)}
             </div>

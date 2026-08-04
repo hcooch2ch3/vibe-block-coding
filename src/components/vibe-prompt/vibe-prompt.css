@@ -230,38 +230,24 @@
     cursor: default;
 }
 
-/* Examples panel (A2) — an INLINE row that appears just above the composer when
-   the 💡 button is pressed, pushing the conversation up (no floating, no dim). It
-   is a sibling of .convArea in the flex-column body, so .convArea shrinks to make
-   room and the composer stays pinned at the bottom via .composerAnchor. */
+/* Examples panel (A2) — an inserted BAND just above the composer, shown when the
+   💡 button is pressed, pushing the conversation up (no floating card, no dim). A
+   dashed top rule separates it from the history; negative side margins cancel the
+   .body padding so the band spans the full card width (clipped by card overflow). */
 .sheet {
     flex: 0 0 auto;
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.625rem 0.625rem;
-    background: #f7fbff;
-    border: 1px solid #dcebff;
-    border-radius: 0.75rem;
+    margin: 0 -0.625rem;
+    padding: 0.5rem 0.75rem 0.625rem;
+    border-top: 1px dashed #dfe8f5;
+    background: #f8fbff;
     animation: vibe-appear 160ms ease-out;
 }
 
 .sheetCap {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-bottom: 0.25rem;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: bold;
-    color: #7d8397;
-}
-
-.sheetClose {
-    border: none;
-    background: transparent;
-    color: #b3bcc8;
-    font-size: 0.9rem;
-    font-weight: bold;
-    line-height: 1;
-    cursor: pointer;
+    color: #8a93a0;
 }
 
 .retry {
