@@ -241,11 +241,14 @@ class ExampleSheet extends React.Component {
         // Focus the first enabled control in the sheet (fall back to the sheet
         // container) so the modal Tab-trap has a stable first edge and shift+Tab can't
         // slip back to the covered conversation.
+        // preventScroll: the sheet starts translated off-screen (slide-up animation), so
+        // focusing its content must NOT scroll the overflow:hidden card to reveal it —
+        // that scroll jerked the header up and back down during the open animation.
         const focusables = this.sheetRef && this.sheetRef.querySelectorAll('button:not([disabled])');
         if (focusables && focusables.length) {
-            focusables[0].focus();
+            focusables[0].focus({preventScroll: true});
         } else if (this.sheetRef) {
-            this.sheetRef.focus();
+            this.sheetRef.focus({preventScroll: true});
         }
         document.addEventListener('keydown', this.handleKeyDown);
     }
@@ -255,7 +258,7 @@ class ExampleSheet extends React.Component {
         // Restore focus to the opener (💡). Guard: on clear-history the opener unmounts
         // in the same commit, so prevFocus may be detached — only refocus if still live.
         if (this.prevFocus && document.contains(this.prevFocus) && this.prevFocus.focus) {
-            this.prevFocus.focus();
+            this.prevFocus.focus({preventScroll: true});
         }
     }
     removeDragListeners () {
@@ -281,10 +284,10 @@ class ExampleSheet extends React.Component {
             const last = f[f.length - 1];
             if (e.shiftKey && document.activeElement === first) {
                 e.preventDefault();
-                last.focus();
+                last.focus({preventScroll: true});
             } else if (!e.shiftKey && document.activeElement === last) {
                 e.preventDefault();
-                first.focus();
+                first.focus({preventScroll: true});
             }
         }
     }
