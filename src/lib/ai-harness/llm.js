@@ -21,6 +21,45 @@ export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 export const REQUEST_TIMEOUT_MS = 45000;
 
 /**
+ * Per-mode request headers (pure). The three connection modes differ only by
+ * which auth header rides along; the body/response contract is shared.
+ *   apiKey → Anthropic direct (BYOK): x-api-key + version + browser-access
+ *   bearer → custom server: Authorization: Bearer <token>
+ *   neither → free proxy: content-type only (matches the proxy's CORS allow-list)
+ * @param {object} [opts] - {apiKey?, bearer?}
+ * @returns {object} fetch headers
+ */
+export const buildHeaders = function (opts = {}) {
+    const {apiKey, bearer} = opts;
+    const headers = {'content-type': 'application/json'};
+    if (apiKey) {
+        headers['x-api-key'] = apiKey;
+        headers['anthropic-version'] = '2023-06-01';
+        headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    } else if (bearer) {
+        headers.Authorization = `Bearer ${bearer}`;
+    }
+    return headers;
+};
+
+/**
+ * Extract the reply text from a v1-contract response. Canonical shape is
+ * Anthropic's {content:[{text}]}; {text} and OpenAI-style
+ * {choices:[{message:{content}}]} are tolerated as compatibility fallbacks so a
+ * custom server can front any provider. Precedence: content → text → choices.
+ * @param {object} data - parsed JSON response body
+ * @returns {string} concatenated reply text ('' if no known shape)
+ */
+export const extractText = function (data) {
+    if (data && Array.isArray(data.content)) return data.content.map(b => b.text || '').join('');
+    if (data && typeof data.text === 'string') return data.text;
+    if (data && Array.isArray(data.choices) && data.choices[0] && data.choices[0].message) {
+        return data.choices[0].message.content || '';
+    }
+    return '';
+};
+
+/**
  * Wraps doFetch with a timeout that rejects the returned promise after
  * timeoutMs milliseconds. When the browser's AbortController is available
  * (window.AbortController), the in-flight fetch is also aborted so the
@@ -382,17 +421,12 @@ export const buildEnvelopeSystemPrompt = function () {
  * @returns {Promise<object>} parsed envelope with optional answer string and optional edits array
  */
 export const requestTurn = async function (config, fetchImpl) {
-    const {apiKey, model, instruction, currentScripts, history,
+    const {apiKey, model, instruction, currentScripts, history, endpoint, headers,
         timeoutMs = REQUEST_TIMEOUT_MS} = config;
     const doFetch = fetchImpl || fetch;
-    const res = await fetchWithTimeout(doFetch, ANTHROPIC_URL, {
+    const res = await fetchWithTimeout(doFetch, endpoint || ANTHROPIC_URL, {
         method: 'POST',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'content-type': 'application/json'
-        },
+        headers: headers || buildHeaders({apiKey}),
         body: JSON.stringify({
             model: model || DEFAULT_MODEL,
             max_tokens: ENVELOPE_MAX_TOKENS,
@@ -406,8 +440,7 @@ export const requestTurn = async function (config, fetchImpl) {
         throw new Error(`LLM 호출 실패: ${msg}`);
     }
     const data = await res.json();
-    const text = (data.content || []).map(b => b.text || '').join('');
-    return parseEnvelope(text);
+    return parseEnvelope(extractText(data));
 };
 
 /**
@@ -417,17 +450,12 @@ export const requestTurn = async function (config, fetchImpl) {
  * @returns {Promise<Array<object>>} DSL 스크립트 배열
  */
 export const requestScripts = async function (config, fetchImpl) {
-    const {apiKey, model, instruction, currentScripts,
+    const {apiKey, model, instruction, currentScripts, endpoint, headers,
         timeoutMs = REQUEST_TIMEOUT_MS} = config;
     const doFetch = fetchImpl || fetch;
-    const res = await fetchWithTimeout(doFetch, ANTHROPIC_URL, {
+    const res = await fetchWithTimeout(doFetch, endpoint || ANTHROPIC_URL, {
         method: 'POST',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'content-type': 'application/json'
-        },
+        headers: headers || buildHeaders({apiKey}),
         body: JSON.stringify({
             model: model || DEFAULT_MODEL,
             max_tokens: 1024,
@@ -441,6 +469,5 @@ export const requestScripts = async function (config, fetchImpl) {
         throw new Error(`LLM 호출 실패: ${msg}`);
     }
     const data = await res.json();
-    const text = (data.content || []).map(block => block.text || '').join('');
-    return parseDSL(text);
+    return parseDSL(extractText(data));
 };

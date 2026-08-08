@@ -116,6 +116,20 @@
     cursor: default;
 }
 
+/* Settings-screen (connection mode) spacing. Stacked inputs get full width and
+   vertical rhythm; the standalone Start / Save-server buttons get top spacing so
+   they don't hug the field/notice above them. */
+.stackedInput {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.5rem;
+}
+
+.settingsBtn {
+    margin-top: 0.75rem;
+}
+
 .gear {
     display: flex;
     align-items: center;

@@ -151,7 +151,9 @@ export const propose = async function (vm, opts, fetchImpl) {
         apiKey: opts.apiKey,
         model: opts.model,
         instruction: opts.instruction,
-        history: opts.history
+        history: opts.history,
+        endpoint: opts.endpoint,
+        headers: opts.headers
     };
     if (!isEmpty) cfg.currentScripts = current;
     const {answer, edits} = await requestTurn(cfg, fetchImpl);

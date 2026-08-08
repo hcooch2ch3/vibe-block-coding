@@ -53,7 +53,11 @@ const baseConfig = new ScratchWebpackConfigBuilder(
         'process.env.DEBUG': Boolean(process.env.DEBUG),
         'process.env.GA_ID': `"${process.env.GA_ID || 'UA-000000-01'}"`,
         'process.env.GTM_ENV_AUTH': `"${process.env.GTM_ENV_AUTH || ''}"`,
-        'process.env.GTM_ID': process.env.GTM_ID ? `"${process.env.GTM_ID}"` : null
+        'process.env.GTM_ID': process.env.GTM_ID ? `"${process.env.GTM_ID}"` : null,
+        // Free-demo proxy endpoint baked into the static bundle (see
+        // src/lib/ai-harness/endpoint-store.js). Set VIBE_PROXY_URL at build time,
+        // or edit the PROXY_URL default in that file before `npm run deploy`.
+        'process.env.VIBE_PROXY_URL': `"${process.env.VIBE_PROXY_URL || ''}"`
     }))
     .addPlugin(new CopyWebpackPlugin({
         patterns: [
@@ -167,6 +171,16 @@ const buildConfig = baseConfig.clone()
 // If you need non-production `dist/` for local dev, such as for `scratch-www` work, you can run something like:
 // `BUILD_MODE=dist npm run build`
 const buildDist = process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist';
+
+// Loud build-time signal: a production/dist build with no VIBE_PROXY_URL bakes the
+// placeholder proxy, so the free demo mode will fail. Warn (don't fail the build —
+// a BYOK-only deploy is a legitimate choice). See src/lib/ai-harness/endpoint-store.js.
+if (buildDist && !process.env.VIBE_PROXY_URL) {
+    // eslint-disable-next-line no-console
+    console.warn('\n[vibe] WARNING: building without VIBE_PROXY_URL — free demo mode will ' +
+        'point at the placeholder proxy and fail. Set VIBE_PROXY_URL=https://<your-proxy>/api/chat ' +
+        'before `npm run build`, or edit PROXY_URL in src/lib/ai-harness/endpoint-store.js.\n');
+}
 
 module.exports = buildDist ?
     [buildConfig.get(), distConfig.get()] :

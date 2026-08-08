@@ -10,6 +10,8 @@ import {glowChangedBlocks} from '../lib/ai-harness/glow';
 import glowStyles from '../lib/ai-harness/glow.css';
 import VMScratchBlocks from '../lib/blocks';
 import {loadKey, saveKey} from '../lib/ai-harness/key-store';
+import {loadEndpoint, saveEndpoint, PROXY_URL} from '../lib/ai-harness/endpoint-store';
+import {buildHeaders} from '../lib/ai-harness/llm';
 import {loadChat, saveChat} from '../lib/ai-harness/chat-store';
 import {
     loadPrefs, savePrefs, clampPosition, defaultPosition, clampSize,
@@ -47,6 +49,12 @@ class VibePrompt extends React.Component {
             'handleToggleExamples',
             'handleEditKey',
             'handleBackFromKey',
+            'handleModeChange',
+            'handleServerUrlDraftChange',
+            'handleServerTokenDraftChange',
+            'handleSubmitServer',
+            'handleStartFree',
+            'handleUseOwnKey',
             'handleResizeStart',
             'handleResizeMove',
             'handleResizeStop'
@@ -81,9 +89,21 @@ class VibePrompt extends React.Component {
         const maxLoadW = Math.max(MIN_W, viewport.innerWidth - (2 * EDGE_MARGIN));
         size.w = Math.max(MIN_W, Math.min(size.w, maxLoadW));
         if (size.h) size = clampSize(size, viewport);
+        // Connection mode (free proxy / own key / custom server). Persisted
+        // separately from the BYOK key so the existing key flow is untouched.
+        const ep = loadEndpoint();
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
+            // 'free' | 'key' | 'server' — how requests reach a model.
+            mode: ep.mode,
+            serverUrl: ep.serverUrl,
+            serverToken: ep.serverToken,
+            serverUrlDraft: ep.serverUrl,
+            serverTokenDraft: ep.serverToken,
+            // Set when the free proxy reports a rate/daily limit → nudge to BYOK
+            // instead of a generic error.
+            freeLimited: false,
             instructionDraft: '',
             busy: false,
             error: false,
@@ -149,11 +169,77 @@ class VibePrompt extends React.Component {
         if (!key) return;
         // saveKey returns false when storage rejects the write (private mode /
         // quota). Surface it instead of silently claiming success (Task 1 review).
+        // The key itself is the load-bearing write — a failed key save is an error.
         if (!saveKey(key)) {
             this.setState({error: true});
             return;
         }
-        this.setState({apiKey: key, keyDraft: '', error: false, editingKey: false});
+        // Selecting key mode is a best-effort persist: if this write fails, the key
+        // still works this session and the mode defaults to a working state on reload.
+        saveEndpoint({mode: 'key', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
+        this.setState({apiKey: key, keyDraft: '', error: false, editingKey: false, mode: 'key', freeLimited: false});
+    }
+    // --- Connection mode helpers -------------------------------------------
+    isReady () {
+        const {mode, apiKey, serverUrl} = this.state;
+        if (mode === 'key') return Boolean(apiKey);
+        if (mode === 'server') return Boolean(serverUrl);
+        return true; // free proxy is always ready
+    }
+    // Resolve the per-mode connection ({endpoint?, apiKey?, headers?}) handed to
+    // propose → requestTurn. Free/server carry explicit headers; key falls back to
+    // the legacy Anthropic-direct path (apiKey only, headers built downstream).
+    resolveConn () {
+        const {mode, apiKey, serverUrl, serverToken} = this.state;
+        if (mode === 'key') return {apiKey};
+        if (mode === 'server') return {endpoint: serverUrl, headers: buildHeaders({bearer: serverToken})};
+        return {endpoint: PROXY_URL, headers: buildHeaders()};
+    }
+    handleModeChange (mode) {
+        if (this.state.busy) return;
+        // Only persist a mode that is actually usable, so a reload never strands
+        // the user on the settings screen with an un-configured mode. The submit
+        // handlers (start/key/server) persist explicitly once the mode is ready.
+        this.setState({mode, error: false, freeLimited: false}, () => {
+            if (this.isReady()) {
+                saveEndpoint({mode, serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
+            }
+        });
+    }
+    handleServerUrlDraftChange (e) {
+        this.setState({serverUrlDraft: e.target.value, error: false});
+    }
+    handleServerTokenDraftChange (e) {
+        this.setState({serverTokenDraft: e.target.value, error: false});
+    }
+    handleSubmitServer (e) {
+        e.preventDefault();
+        const url = this.state.serverUrlDraft.trim();
+        const token = this.state.serverTokenDraft.trim();
+        if (!url) return;
+        if (!saveEndpoint({mode: 'server', serverUrl: url, serverToken: token})) {
+            this.setState({error: true});
+            return;
+        }
+        this.setState({
+            mode: 'server',
+            serverUrl: url,
+            serverToken: token,
+            serverUrlDraft: url,
+            serverTokenDraft: token,
+            error: false,
+            editingKey: false,
+            freeLimited: false
+        });
+    }
+    handleStartFree () {
+        // Free mode needs no input — persist and drop straight into the chat.
+        saveEndpoint({mode: 'free', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
+        this.setState({mode: 'free', editingKey: false, error: false, freeLimited: false});
+    }
+    handleUseOwnKey () {
+        // From the free-limit nudge: open settings pre-set to key mode.
+        this.setState({editingKey: true, mode: 'key', freeLimited: false, error: false});
     }
     handleEditKey () {
         // Switch to the key-entry screen WITHOUT clearing the current key, so the
@@ -279,12 +365,13 @@ class VibePrompt extends React.Component {
     // append a NEW turn (pending proposal or answer). Shared by submit's success
     // tail, retry, rebuild and make-it. Does NOT push a user turn or read the draft.
     runProposeFor (instruction, targetId) {
-        if (this.state.busy || !this.state.apiKey) return Promise.resolve();
+        if (this.state.busy || !this.isReady()) return Promise.resolve();
         const vm = this.props.vm;
-        this.setState({busy: true, error: false, lastInstruction: {instruction, targetId}});
+        this.setState({busy: true, error: false, freeLimited: false, lastInstruction: {instruction, targetId}});
         const history = this.buildHistoryWindow();
         return Promise.resolve()
-            .then(() => propose(vm, {apiKey: this.state.apiKey, instruction, targetId, history}))
+            .then(() => propose(vm, Object.assign(
+                {}, this.resolveConn(), {instruction, targetId, history})))
             .then(({answer, proposal}) => {
                 // AUTO_CLASSIFY true (shipped) → keep the model's answer/proposal
                 // split. The false path is NOT yet implemented: flipping the flag
@@ -320,9 +407,14 @@ class VibePrompt extends React.Component {
             .catch(err => {
                 // network / parse / empty-envelope / deleted-pinned-sprite (propose
                 // throws) → error state; lastInstruction is kept for Try-again.
+                // In free mode, a proxy rate/daily limit is not a real failure —
+                // surface a "use your own key" nudge instead of a generic error.
+                const msg = String((err && err.message) || '');
+                const limited = this.state.mode === 'free' &&
+                    /daily demo limit|too many requests/i.test(msg);
                 // eslint-disable-next-line no-console
                 console.error('[vibe] propose failed:', err);
-                this.setState({busy: false, error: true});
+                this.setState({busy: false, error: !limited, freeLimited: limited});
             });
     }
     handleClearHistory () {
@@ -338,7 +430,7 @@ class VibePrompt extends React.Component {
     submitInstruction (instruction) {
         const text = (instruction || '').trim();
         const vm = this.props.vm;
-        if (!text || this.state.busy || !this.state.apiKey || !vm || !vm.editingTarget) return;
+        if (!text || this.state.busy || !this.isReady() || !vm || !vm.editingTarget) return;
         // Pin the sprite NOW; propose/apply use this id even if the child switches
         // sprites mid-request. A deleted pinned sprite → propose throws → error.
         const targetId = vm.editingTarget.id;
@@ -415,7 +507,7 @@ class VibePrompt extends React.Component {
         // Replay the PINNED instruction+target after a FAILED turn (network/parse).
         // Routes through runProposeFor so it pushes NO duplicate user turn.
         const last = this.state.lastInstruction;
-        if (!last || this.state.busy || !this.state.apiKey) return;
+        if (!last || this.state.busy || !this.isReady()) return;
         this.runProposeFor(last.instruction, last.targetId);
     }
     handleContextTurnsChange (n) {
@@ -429,11 +521,15 @@ class VibePrompt extends React.Component {
         return (
             <VibePromptComponent
                 busy={this.state.busy}
-                canCancelKey={Boolean(this.state.apiKey)}
+                canCancelKey={this.isReady()}
                 error={this.state.error}
-                hasKey={Boolean(this.state.apiKey) && !this.state.editingKey}
+                freeLimited={this.state.freeLimited}
+                hasKey={this.isReady() && !this.state.editingKey}
+                mode={this.state.mode}
                 instructionDraft={this.state.instructionDraft}
                 keyDraft={this.state.keyDraft}
+                serverUrlDraft={this.state.serverUrlDraft}
+                serverTokenDraft={this.state.serverTokenDraft}
                 onInstructionDraftChange={this.handleInstructionDraftChange}
                 onKeyDraftChange={this.handleKeyDraftChange}
                 collapsed={this.state.collapsed}
@@ -459,6 +555,12 @@ class VibePrompt extends React.Component {
                 onResizeStart={this.handleResizeStart}
                 onSubmitInstruction={this.handleSubmitInstruction}
                 onSubmitKey={this.handleSubmitKey}
+                onModeChange={this.handleModeChange}
+                onServerUrlDraftChange={this.handleServerUrlDraftChange}
+                onServerTokenDraftChange={this.handleServerTokenDraftChange}
+                onSubmitServer={this.handleSubmitServer}
+                onStartFree={this.handleStartFree}
+                onUseOwnKey={this.handleUseOwnKey}
             />
         );
     }

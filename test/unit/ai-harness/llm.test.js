@@ -8,6 +8,8 @@ import {
     parseEnvelope,
     requestScripts,
     requestTurn,
+    buildHeaders,
+    extractText,
     ENVELOPE_MAX_TOKENS,
     REQUEST_TIMEOUT_MS
 } from '../../../src/lib/ai-harness/llm';
@@ -308,6 +310,13 @@ describe('buildEnvelopeSystemPrompt (edits contract)', () => {
         expect(p.toLowerCase()).toMatch(/instead of/);  // replacement steering
         expect(p.toLowerCase()).toMatch(/unchanged|do not mention|kept|is kept/);
     });
+    // The free-demo proxy (api/chat.js) rejects any request whose system prompt
+    // lacks the marker 'Scratch blocks'. If this phrase is ever reworded here,
+    // this test trips so the proxy's APP_MARKER is updated in the same change
+    // instead of silently 400-ing every free-mode request.
+    test('contains the proxy app-marker "Scratch blocks" (KEEP IN SYNC with api/chat.js APP_MARKER)', () => {
+        expect(buildEnvelopeSystemPrompt()).toMatch(/Scratch blocks/);
+    });
 });
 
 describe('parseEnvelope bare-array lift', () => {
@@ -315,5 +324,107 @@ describe('parseEnvelope bare-array lift', () => {
         const out = parseEnvelope('[{"hat":"when_flag","body":[["move",10]]}]');
         expect(out.edits).toEqual([{action: 'add', script: {hat: 'when_flag', body: [['move', 10]]}}]);
         expect(out.answer).toBeUndefined();
+    });
+});
+
+describe('buildHeaders (per-mode)', () => {
+    test('key mode: x-api-key + version + browser-access + content-type', () => {
+        const h = buildHeaders({apiKey: 'sk-test'});
+        expect(h['x-api-key']).toBe('sk-test');
+        expect(h['anthropic-version']).toBe('2023-06-01');
+        expect(h['anthropic-dangerous-direct-browser-access']).toBe('true');
+        expect(h['content-type']).toBe('application/json');
+        expect(h.Authorization).toBeUndefined();
+    });
+    test('server mode: Authorization Bearer + content-type, no x-api-key', () => {
+        const h = buildHeaders({bearer: 'tok-123'});
+        expect(h.Authorization).toBe('Bearer tok-123');
+        expect(h['content-type']).toBe('application/json');
+        expect(h['x-api-key']).toBeUndefined();
+        expect(h['anthropic-dangerous-direct-browser-access']).toBeUndefined();
+    });
+    test('free mode: content-type ONLY (no anthropic headers — proxy CORS allows only content-type)', () => {
+        const h = buildHeaders();
+        expect(Object.keys(h)).toEqual(['content-type']);
+    });
+    test('apiKey wins over bearer if both somehow present', () => {
+        const h = buildHeaders({apiKey: 'sk', bearer: 'tok'});
+        expect(h['x-api-key']).toBe('sk');
+        expect(h.Authorization).toBeUndefined();
+    });
+});
+
+describe('extractText (v1 response shapes)', () => {
+    test('canonical Anthropic content shape', () => {
+        expect(extractText({content: [{text: 'a'}, {text: 'b'}]})).toBe('ab');
+    });
+    test('plain {text} fallback', () => {
+        expect(extractText({text: 'hi'})).toBe('hi');
+    });
+    test('OpenAI-style choices fallback', () => {
+        expect(extractText({choices: [{message: {content: 'yo'}}]})).toBe('yo');
+    });
+    test('precedence: content wins over text/choices', () => {
+        expect(extractText({content: [{text: 'C'}], text: 'T', choices: [{message: {content: 'X'}}]})).toBe('C');
+    });
+    test('unknown shape → empty string', () => {
+        expect(extractText({weird: true})).toBe('');
+        expect(extractText(null)).toBe('');
+    });
+});
+
+describe('requestTurn / requestScripts endpoint routing', () => {
+    const okEnvelope = () => ({
+        ok: true,
+        json: async () => ({content: [{type: 'text', text: JSON.stringify({answer: 'ok'})}]})
+    });
+    test('free mode: posts to the given endpoint with content-type only (no x-api-key)', async () => {
+        let captured;
+        const fetchImpl = async (url, opts) => {
+            captured = {url, opts};
+            return okEnvelope();
+        };
+        await requestTurn(
+            {endpoint: 'https://proxy.example/api/chat', headers: buildHeaders(), instruction: 'walk'},
+            fetchImpl
+        );
+        expect(captured.url).toBe('https://proxy.example/api/chat');
+        expect(captured.opts.headers['x-api-key']).toBeUndefined();
+        expect(captured.opts.headers['content-type']).toBe('application/json');
+    });
+    test('server mode: posts to endpoint with Authorization Bearer', async () => {
+        let captured;
+        const fetchImpl = async (url, opts) => {
+            captured = {url, opts};
+            return {ok: true, json: async () => ({content: [{text: '[{"hat":"when_flag","body":[]}]'}]})};
+        };
+        await requestScripts(
+            {endpoint: 'https://gw.example/v1/messages', headers: buildHeaders({bearer: 't'}), instruction: 'x'},
+            fetchImpl
+        );
+        expect(captured.url).toBe('https://gw.example/v1/messages');
+        expect(captured.opts.headers.Authorization).toBe('Bearer t');
+    });
+    test('key mode (no endpoint): still posts to Anthropic with x-api-key (unchanged default)', async () => {
+        let captured;
+        const fetchImpl = async (url, opts) => {
+            captured = {url, opts};
+            return okEnvelope();
+        };
+        await requestTurn({apiKey: 'sk-x', instruction: 'walk'}, fetchImpl);
+        expect(captured.url).toMatch(/api\.anthropic\.com/);
+        expect(captured.opts.headers['x-api-key']).toBe('sk-x');
+        expect(captured.opts.headers['anthropic-dangerous-direct-browser-access']).toBe('true');
+    });
+    test('reads a choices-shaped success body from a custom server', async () => {
+        const fetchImpl = async () => ({
+            ok: true,
+            json: async () => ({choices: [{message: {content: JSON.stringify({answer: 'hey'})}}]})
+        });
+        const out = await requestTurn(
+            {endpoint: 'https://gw.example', headers: buildHeaders({bearer: 't'}), instruction: 'x'},
+            fetchImpl
+        );
+        expect(out.answer).toBe('hey');
     });
 });

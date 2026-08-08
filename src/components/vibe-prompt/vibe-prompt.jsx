@@ -135,12 +135,115 @@ const messages = defineMessages({
         id: 'vibe.prompt.back',
         defaultMessage: 'Back',
         description: 'Button to cancel changing the API key and keep the current one'
+    },
+    connMethod: {
+        id: 'vibe.prompt.connMethod',
+        defaultMessage: 'How to connect',
+        description: 'Label above the connection-mode toggle (free / own key / custom server)'
+    },
+    connFree: {
+        id: 'vibe.prompt.connFree',
+        defaultMessage: 'Free',
+        description: 'Connection mode: use the hosted free demo (no key needed)'
+    },
+    connKey: {
+        id: 'vibe.prompt.connKey',
+        defaultMessage: 'My key',
+        description: 'Connection mode: use your own Anthropic API key'
+    },
+    connServer: {
+        id: 'vibe.prompt.connServer',
+        defaultMessage: 'Custom server',
+        description: 'Connection mode: point at your own server / gateway URL'
+    },
+    freeIntro: {
+        id: 'vibe.prompt.freeIntro',
+        defaultMessage: 'No key needed — just start making things!',
+        description: 'Explanation shown when the free connection mode is selected'
+    },
+    startFree: {
+        id: 'vibe.prompt.startFree',
+        defaultMessage: 'Start',
+        description: 'Button to begin using the free demo'
+    },
+    serverUrlPlaceholder: {
+        id: 'vibe.prompt.serverUrlPlaceholder',
+        defaultMessage: 'Server URL (https://…)',
+        description: 'Placeholder for the custom server URL input'
+    },
+    serverTokenPlaceholder: {
+        id: 'vibe.prompt.serverTokenPlaceholder',
+        defaultMessage: 'Token (optional)',
+        description: 'Placeholder for the optional custom-server token input'
+    },
+    serverNotice: {
+        id: 'vibe.prompt.serverNotice',
+        defaultMessage: 'Your token is sent to this address and stored in this browser.',
+        description: 'Warning shown under the custom-server inputs'
+    },
+    saveServer: {
+        id: 'vibe.prompt.saveServer',
+        defaultMessage: 'Save server',
+        description: 'Button to save the custom-server URL and token'
+    },
+    freeLimited: {
+        id: 'vibe.prompt.freeLimited',
+        defaultMessage: 'The free demo is busy right now. Add your own key to keep going.',
+        description: 'Shown when the free proxy hits a rate/daily limit'
+    },
+    useOwnKey: {
+        id: 'vibe.prompt.useOwnKey',
+        defaultMessage: 'Use my key',
+        description: 'Button that opens settings in own-key mode after a free-demo limit'
     }
 });
+
+// One segment of the connection-mode toggle. A bound handler reports its value
+// up (no inline arrow — project lint forbids react/jsx-no-bind). Uses inline
+// styles so it needs no new CSS-module classes.
+const modeBtnStyle = on => ({
+    flex: 1,
+    padding: '6px 4px',
+    fontSize: '0.78rem',
+    border: '1px solid #4C97FF',
+    cursor: 'pointer',
+    background: on ? '#4C97FF' : '#fff',
+    color: on ? '#fff' : '#4C97FF'
+});
+const TOGGLE_ROW_STYLE = {display: 'flex', gap: '4px', margin: '4px 0 8px'};
+class ModeButton extends React.Component {
+    constructor (props) {
+        super(props);
+        this.handleClick = this.handleClick.bind(this);
+    }
+    handleClick () {
+        this.props.onClick(this.props.value);
+    }
+    render () {
+        const on = this.props.value === this.props.current;
+        return (
+            <button
+                type="button"
+                aria-pressed={on}
+                style={modeBtnStyle(on)}
+                onClick={this.handleClick}
+            >
+                {this.props.label}
+            </button>
+        );
+    }
+}
+ModeButton.propTypes = {
+    current: PropTypes.string,
+    label: PropTypes.string,
+    onClick: PropTypes.func,
+    value: PropTypes.string
+};
 
 // A chip is its own component with a bound handler so the mapped list needs no
 // inline arrow in JSX (project lint forbids react/jsx-no-bind). It reports its
 // sentence back up via onClick(label); the container sends it immediately (one-tap).
+// eslint-disable-next-line react/no-multi-comp
 class ChipButton extends React.Component {
     constructor (props) {
         super(props);
@@ -403,7 +506,10 @@ const VibePromptComponent = props => {
         collapsed, position, onToggleCollapse, onDragStop,
         turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
         canCancelKey, onCancelKey, size, onResizeStart,
-        contextTurns, onContextTurnsChange
+        contextTurns, onContextTurnsChange,
+        mode, serverUrlDraft, serverTokenDraft, freeLimited,
+        onModeChange, onServerUrlDraftChange, onServerTokenDraftChange,
+        onSubmitServer, onStartFree, onUseOwnKey
     } = props;
 
     // Chat mode (key set, expanded): give the card a comfortable default height so the
@@ -425,32 +531,110 @@ const VibePromptComponent = props => {
                     {'‹ '}{intl.formatMessage(messages.back)}
                 </button>
             )}
-            <form
-                className={styles.row}
-                onSubmit={onSubmitKey}
-            >
-                <span className={styles.icon}>{'🔑'}</span>
-                <input
-                    aria-label={intl.formatMessage(messages.keyPlaceholder)}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className={styles.input}
-                    type="text"
-                    inputMode="text"
-                    placeholder={intl.formatMessage(messages.keyPlaceholder)}
-                    value={keyDraft}
-                    onChange={onKeyDraftChange}
-                />
-                <button
-                    className={styles.button}
-                    type="submit"
-                >
-                    {intl.formatMessage(messages.saveKey)}
-                </button>
-            </form>
             <div className={styles.notice}>
-                {intl.formatMessage(messages.keyNotice)}
+                {intl.formatMessage(messages.connMethod)}
             </div>
+            <div style={TOGGLE_ROW_STYLE}>
+                <ModeButton
+                    value="free"
+                    current={mode}
+                    label={intl.formatMessage(messages.connFree)}
+                    onClick={onModeChange}
+                />
+                <ModeButton
+                    value="key"
+                    current={mode}
+                    label={intl.formatMessage(messages.connKey)}
+                    onClick={onModeChange}
+                />
+                <ModeButton
+                    value="server"
+                    current={mode}
+                    label={intl.formatMessage(messages.connServer)}
+                    onClick={onModeChange}
+                />
+            </div>
+            {mode === 'free' && (
+                <div>
+                    <div className={styles.notice}>
+                        {intl.formatMessage(messages.freeIntro)}
+                    </div>
+                    <button
+                        className={classNames(styles.button, styles.settingsBtn)}
+                        type="button"
+                        onClick={onStartFree}
+                    >
+                        {intl.formatMessage(messages.startFree)}
+                    </button>
+                </div>
+            )}
+            {mode === 'key' && (
+                <form
+                    className={styles.row}
+                    onSubmit={onSubmitKey}
+                >
+                    <span className={styles.icon}>{'🔑'}</span>
+                    <input
+                        aria-label={intl.formatMessage(messages.keyPlaceholder)}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={styles.input}
+                        type="text"
+                        inputMode="text"
+                        placeholder={intl.formatMessage(messages.keyPlaceholder)}
+                        value={keyDraft}
+                        onChange={onKeyDraftChange}
+                    />
+                    <button
+                        className={styles.button}
+                        type="submit"
+                    >
+                        {intl.formatMessage(messages.saveKey)}
+                    </button>
+                </form>
+            )}
+            {mode === 'key' && (
+                <div className={styles.notice}>
+                    {intl.formatMessage(messages.keyNotice)}
+                </div>
+            )}
+            {mode === 'server' && (
+                <form onSubmit={onSubmitServer}>
+                    <input
+                        aria-label={intl.formatMessage(messages.serverUrlPlaceholder)}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={classNames(styles.input, styles.stackedInput)}
+                        type="text"
+                        inputMode="url"
+                        placeholder={intl.formatMessage(messages.serverUrlPlaceholder)}
+                        value={serverUrlDraft}
+                        onChange={onServerUrlDraftChange}
+                    />
+                    <input
+                        aria-label={intl.formatMessage(messages.serverTokenPlaceholder)}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={classNames(styles.input, styles.stackedInput)}
+                        type="text"
+                        inputMode="text"
+                        placeholder={intl.formatMessage(messages.serverTokenPlaceholder)}
+                        value={serverTokenDraft}
+                        onChange={onServerTokenDraftChange}
+                    />
+                    <button
+                        className={classNames(styles.button, styles.settingsBtn)}
+                        type="submit"
+                    >
+                        {intl.formatMessage(messages.saveServer)}
+                    </button>
+                </form>
+            )}
+            {mode === 'server' && (
+                <div className={styles.notice}>
+                    {intl.formatMessage(messages.serverNotice)}
+                </div>
+            )}
             {error && (
                 <div
                     className={classNames(styles.status, styles.error)}
@@ -550,6 +734,21 @@ const VibePromptComponent = props => {
                     </span>
                 </div>
             )}
+            {freeLimited && !busy && (
+                <div
+                    className={classNames(styles.status, styles.error)}
+                    role="alert"
+                >
+                    <span>{intl.formatMessage(messages.freeLimited)}</span>
+                    <button
+                        className={styles.retry}
+                        type="button"
+                        onClick={onUseOwnKey}
+                    >
+                        {intl.formatMessage(messages.useOwnKey)}
+                    </button>
+                </div>
+            )}
             {error && !busy && (
                 <div
                     className={classNames(styles.status, styles.error)}
@@ -563,6 +762,18 @@ const VibePromptComponent = props => {
                     >
                         {intl.formatMessage(messages.tryAgain)}
                     </button>
+                    {/* Free mode has no key of its own — if the proxy is down or
+                        misconfigured, retrying just fails again. Offer an escape to
+                        BYOK so the user isn't stuck at a dead end. */}
+                    {mode === 'free' && (
+                        <button
+                            className={styles.retry}
+                            type="button"
+                            onClick={onUseOwnKey}
+                        >
+                            {intl.formatMessage(messages.useOwnKey)}
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -656,11 +867,15 @@ VibePromptComponent.defaultProps = {
     collapsed: false,
     contextTurns: 3,
     error: false,
+    freeLimited: false,
     hasKey: false,
+    mode: 'free',
     onContextTurnsChange: noop,
     turns: [],
     instructionDraft: '',
     keyDraft: '',
+    serverUrlDraft: '',
+    serverTokenDraft: '',
     position: {x: 0, y: 0},
     size: {w: 300, h: null}
 };
@@ -672,10 +887,12 @@ VibePromptComponent.propTypes = {
     contextTurns: PropTypes.number,
     error: PropTypes.bool,
     examplesOpen: PropTypes.bool,
+    freeLimited: PropTypes.bool,
     hasKey: PropTypes.bool,
     instructionDraft: PropTypes.string,
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
+    mode: PropTypes.oneOf(['free', 'key', 'server']),
     onApply: PropTypes.func,
     onCancelKey: PropTypes.func,
     onChipClick: PropTypes.func.isRequired,
@@ -687,14 +904,22 @@ VibePromptComponent.propTypes = {
     onInstructionDraftChange: PropTypes.func.isRequired,
     onKeyDraftChange: PropTypes.func.isRequired,
     onMakeIt: PropTypes.func,
+    onModeChange: PropTypes.func,
     onRebuild: PropTypes.func,
     onResizeStart: PropTypes.func,
     onRetry: PropTypes.func.isRequired,
+    onServerTokenDraftChange: PropTypes.func,
+    onServerUrlDraftChange: PropTypes.func,
+    onStartFree: PropTypes.func,
     onSubmitInstruction: PropTypes.func.isRequired,
     onSubmitKey: PropTypes.func.isRequired,
+    onSubmitServer: PropTypes.func,
     onToggleCollapse: PropTypes.func.isRequired,
     onToggleExamples: PropTypes.func,
+    onUseOwnKey: PropTypes.func,
     position: PropTypes.shape({x: PropTypes.number, y: PropTypes.number}),
+    serverTokenDraft: PropTypes.string,
+    serverUrlDraft: PropTypes.string,
     size: PropTypes.shape({w: PropTypes.number, h: PropTypes.number}),
     turns: PropTypes.array,
     vm: PropTypes.object
