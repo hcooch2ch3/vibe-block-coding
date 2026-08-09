@@ -17,7 +17,7 @@
 // guarded so a static browser bundle without the define never throws.
 const envProxyUrl =
     (typeof process !== 'undefined' && process.env && process.env.VIBE_PROXY_URL) || '';
-export const PROXY_URL = envProxyUrl || 'https://YOUR-PROXY.vercel.app/api/chat';
+export const PROXY_URL = envProxyUrl || 'https://vibe-proxy.vercel.app/api/chat';
 
 // Loud signal if the demo shipped without a real proxy URL — free mode would
 // otherwise POST to a nonexistent host and fail silently for every visitor.
