@@ -33,3 +33,4 @@ npm-*
 
 # Superpowers brainstorm/visual-companion scratch artifacts (local only)
 .superpowers/
+.vercel
