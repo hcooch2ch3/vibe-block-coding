@@ -4,7 +4,7 @@ Kids build with words and refine with blocks. An AI plus block-coding tool for t
 
 **▶ [Try it live](https://vibe-app-drab.vercel.app/).** No signup, no API key. Type a sentence, watch blocks appear, run it.
 
-![Demo: type a sentence, get blocks, press the green flag, the sprite moves](docs/demo.gif)
+![Demo: send a prompt, apply the AI's blocks, press the green flag, the cat spins](docs/demo.gif)
 
 ## What it is
 
