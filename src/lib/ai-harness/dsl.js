@@ -1,21 +1,23 @@
 /**
- * AI 하니스 — DSL ↔ Scratch 블록 변환기.
+ * AI harness: DSL ↔ Scratch block converter.
  *
- * LLM은 짧고 친화적인 미니 DSL(예: ['move', 10])을 다루고, scratch-vm은 장황한
- * 런타임 블록 객체를 다룬다. 이 모듈이 그 사이를 양방향 번역한다.
+ * The LLM works with a short, friendly mini DSL (e.g. ['move', 10]), while
+ * scratch-vm works with verbose runtime block objects. This module translates
+ * between the two, both directions.
  *
- *   compile:   DSL 스크립트 → 블록 배열 (vm.shareBlocksToTarget 에 넘김)
- *   decompile: Blocks 인스턴스 → DSL 스크립트 (현재 프로그램을 LLM에 보여줄 때)
+ *   compile:   DSL script → block array (passed to vm.shareBlocksToTarget)
+ *   decompile: Blocks instance → DSL script (to show the current program to the LLM)
  *
- * 헤드리스 왕복 테스트로 검증됨(compile→decompile 항등). OPMAP 테이블에 항목을
- * 추가하는 것만으로 지원 opcode가 확장된다.
+ * Verified by headless round-trip tests (compile→decompile identity). Adding an
+ * entry to the OPMAP table is all it takes to extend the supported opcodes.
  */
 
-// DSL 이름 → {opcode, hat?, inputs:[{name, shadow, field}]}
-// inputs 는 값 입력마다 생성할 shadow 블록 명세.
-// shadow 는 vm 실행뿐 아니라 에디터에 뜨는 입력 위젯 종류도 결정하므로(예:
-// math_positive_number = 음수 못 넣는 칸), 런타임 수용값이 아니라 아이에게 보이는
-// scratch-blocks 위젯에 맞춰야 한다. (왕복 테스트는 이 위젯 차이를 못 잡음.)
+// DSL name → {opcode, hat?, inputs:[{name, shadow, field}]}
+// inputs is the shadow block spec to create for each value input.
+// shadow decides not only vm execution but also the input widget shown in the
+// editor (e.g. math_positive_number = a slot that rejects negatives), so it must
+// match the scratch-blocks widget the child sees, not the runtime accepted value.
+// (Round-trip tests do not catch this widget difference.)
 export const OPMAP = {
     when_flag: {opcode: 'event_whenflagclicked', hat: true, inputs: []},
     when_clicked: {opcode: 'event_whenthisspriteclicked', hat: true, inputs: []},
@@ -54,11 +56,11 @@ export const OPMAP = {
         inputs: [{name: 'TIMES', shadow: 'math_whole_number', field: 'NUM'}],
         substack: 'SUBSTACK'
     },
-    // forever 는 cap 블록(뒤에 스텝 불가) — compile 은 강제 안 함, parseDSL 이 cap 로 거부.
+    // forever is a cap block (no steps can follow): compile does not enforce it, parseDSL rejects via cap.
     forever: {opcode: 'control_forever', inputs: [], substack: 'SUBSTACK', cap: true}
 };
 
-// opcode → {name, spec} 역방향 매핑 (decompile 용)
+// opcode → {name, spec} reverse mapping (for decompile)
 const REV = {};
 for (const [name, spec] of Object.entries(OPMAP)) REV[spec.opcode] = {name, spec};
 
@@ -66,14 +68,14 @@ let counter = 0;
 const uid = () => `dsl_${Date.now().toString(36)}_${(counter++).toString(36)}`;
 
 /**
- * DSL 스크립트 하나를 런타임 블록 배열로 컴파일한다.
- * @param {{hat: string, body: Array<Array>}} script - 예: {hat:'when_flag', body:[['move',10]]}
- * @returns {Array<object>} scratch-vm 블록 객체 배열 (shareBlocksToTarget 형식)
+ * Compile one DSL script into a runtime block array.
+ * @param {{hat: string, body: Array<Array>}} script - e.g. {hat:'when_flag', body:[['move',10]]}
+ * @returns {Array<object>} array of scratch-vm block objects (shareBlocksToTarget format)
  */
 export const compileScript = function (script) {
     const out = [];
-    // 스텝 리스트를 next-chain 으로 컴파일하고 첫 블록을 돌려준다. 하위 스택은
-    // 내부 이름(emitSeq)으로 재귀. 첫 스텝만 topLevel(hat, x/y).
+    // Compile a step list into a next-chain and return the first block. Substacks
+    // recurse via the inner name (emitSeq). Only the first step is topLevel (hat, x/y).
     const emitSequence = function emitSeq (steps, parentId, topLevel) {
         let first = null;
         let prev = null;
@@ -81,7 +83,7 @@ export const compileScript = function (script) {
         for (const step of steps) {
             const [name, ...rest] = step;
             const spec = OPMAP[name];
-            if (!spec) throw new Error(`미지원 opcode: ${name}`);
+            if (!spec) throw new Error(`unsupported opcode: ${name}`);
             const id = uid();
             const block = {
                 id,
@@ -125,37 +127,37 @@ export const compileScript = function (script) {
         }
         return first;
     };
-    // hat + body 를 한 시퀀스로: 첫 스텝(hat) 이 topLevel, 나머지가 next 로 이어짐.
+    // hat + body as one sequence: the first step (hat) is topLevel, the rest chain via next.
     emitSequence([[script.hat], ...script.body], null, true);
     return out;
 };
 
 /**
- * 여러 DSL 스크립트를 하나의 블록 배열로 컴파일한다.
- * @param {Array<{hat: string, body: Array<Array>}>} scripts - DSL 스크립트 배열
- * @returns {Array<object>} 합쳐진 scratch-vm 블록 객체 배열
+ * Compile several DSL scripts into a single block array.
+ * @param {Array<{hat: string, body: Array<Array>}>} scripts - array of DSL scripts
+ * @returns {Array<object>} merged array of scratch-vm block objects
  */
 export const compile = function (scripts) {
     return scripts.flatMap(compileScript);
 };
 
-// 숫자꼴 문자열은 Number 로, 그 외는 문자열 그대로 (필드 값 역변환).
+// Numeric-looking strings become Number, everything else stays a string (field value back-conversion).
 const coerce = v => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v);
 
 /**
- * DSL 스크립트의 body 인자를 decompile 과 동일하게 coerce 해 정규화한다.
- * LLM 은 숫자를 "10" 처럼 문자열로 돌려주기도 하는데, decompile 결과와 같은 공간에
- * 놓아야 diff 가 의미 비교(값이 같으면 동일)를 할 수 있다.
- * @param {object} script - {hat, body} DSL 스크립트
- * @returns {object} 인자가 coerce 된 새 스크립트
+ * Normalize a DSL script's body args by coercing them the same way decompile does.
+ * The LLM sometimes returns numbers as strings like "10", and they must sit in the
+ * same space as decompile output so diff can compare by meaning (equal value = same).
+ * @param {object} script - {hat, body} DSL script
+ * @returns {object} a new script with coerced args
  */
-// DSL 스텝 하나를 정규화 (값 인자 coerce + 하위 스택 재귀).
+// Normalize one DSL step (coerce value args + recurse into substack).
 const normalizeStep = function (step) {
     const [name, ...rest] = step;
     const spec = OPMAP[name];
     const n = spec ? spec.inputs.length : rest.length;
-    // text shadow 는 문자열 유지(decompile 과 동일 공간). 안 그러면 sameScript 가
-    // '5'/'05'/'5.0' 를 동일로 봐 텍스트 편집이 조용히 keep 으로 떨어진다.
+    // text shadow stays a string (same space as decompile). Otherwise sameScript
+    // treats '5'/'05'/'5.0' as equal and text edits silently drop to keep.
     const valueArgs = rest.slice(0, n).map((v, i) =>
         ((spec && spec.inputs[i] && spec.inputs[i].shadow === 'text') ? String(v) : coerce(v)));
     if (spec && spec.substack) {
@@ -168,18 +170,18 @@ export const normalizeScript = function (script) {
     return {hat: script.hat, body: script.body.map(normalizeStep)};
 };
 
-// 블록/next 시퀀스를 body 배열로 역변환. 각 블록을 스텝으로 풀고, 하위 스택은
-// 내부 이름(decompileSeq)으로 재귀한다.
+// Convert a block/next sequence back into a body array. Each block unfolds into a
+// step, and substacks recurse via the inner name (decompileSeq).
 const decompileSequence = function decompileSeq (blocks, firstId) {
     const body = [];
     let cur = firstId;
     while (cur) {
         const block = blocks.getBlock(cur);
         const entry = REV[block.opcode];
-        if (!entry) throw new Error(`역매핑 없음: ${block.opcode}`);
+        if (!entry) throw new Error(`no reverse mapping: ${block.opcode}`);
         const args = entry.spec.inputs.map(inp => {
             const val = blocks.getBlock(block.inputs[inp.name].block).fields[inp.field].value;
-            // text shadow 는 문자열 그대로, 숫자 shadow 만 coerce.
+            // text shadow stays a string, only numeric shadow is coerced.
             return inp.shadow === 'text' ? val : coerce(val);
         });
         if (entry.spec.substack) {
@@ -193,18 +195,18 @@ const decompileSequence = function decompileSeq (blocks, firstId) {
     return body;
 };
 
-// hat id 로 시작하는 스택 하나를 {hat, body} DSL 스크립트로 역변환.
+// Convert one stack starting at hat id back into a {hat, body} DSL script.
 const decompileScript = function (blocks, hatId) {
     const hat = blocks.getBlock(hatId);
     return {hat: REV[hat.opcode].name, body: decompileSequence(blocks, hat.next)};
 };
 
 /**
- * 지원하는 top-level hat 블록의 id를 워크스페이스 순서대로 돌려준다.
- * decompile 이 만드는 스크립트 배열과 인덱스가 일치하므로, 편집(applyEdit)이
- * "N번째 스크립트"를 실제 블록으로 되짚을 때 이 순서를 공유한다.
+ * Return the ids of supported top-level hat blocks in workspace order.
+ * The index matches the script array decompile produces, so edits (applyEdit)
+ * share this order when mapping "the Nth script" back to actual blocks.
  * @param {Blocks} blocks - vm.editingTarget.blocks
- * @returns {Array<string>} hat 블록 id 배열
+ * @returns {Array<string>} array of hat block ids
  */
 export const scriptHatIds = function (blocks) {
     return blocks._scripts
@@ -214,9 +216,9 @@ export const scriptHatIds = function (blocks) {
 };
 
 /**
- * Blocks 인스턴스의 모든 top-level hat 스크립트를 DSL로 역변환한다.
+ * Decompile every top-level hat script of a Blocks instance into DSL.
  * @param {Blocks} blocks - vm.editingTarget.blocks
- * @returns {Array<object>} DSL 스크립트({hat, body}) 배열
+ * @returns {Array<object>} array of DSL scripts ({hat, body})
  */
 export const decompile = function (blocks) {
     return scriptHatIds(blocks).map(id => decompileScript(blocks, id));

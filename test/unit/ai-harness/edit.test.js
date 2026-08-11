@@ -47,7 +47,7 @@ describe('diff (old -> new DSL, per-script ops)', () => {
         ]);
     });
 
-    test('unchanged script stays kept while a sibling changes (real 기존 보존)', () => {
+    test('unchanged script stays kept while a sibling changes (existing preserved)', () => {
         const oldS = [flag([['move', 10]]), flag([['say', 'a']])];
         const newS = [flag([['move', 10]]), flag([['say', 'b']])];
         expect(diff(oldS, newS)).toEqual([

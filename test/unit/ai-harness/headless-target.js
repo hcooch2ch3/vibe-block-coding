@@ -29,7 +29,7 @@ export function makeHeadlessVM () {
 }
 
 // Ids of every block reachable from a script's hat (hat + stack + input shadows),
-// so a test can assert those exact ids survive an edit (= real 기존 보존).
+// so a test can assert those exact ids survive an edit (= existing scripts preserved).
 export function reachableIds (blocks, hatId) {
     const ids = [];
     const walk = id => {

@@ -1,5 +1,5 @@
-// End-to-end seam test for the bidirectional edit loop — the contest pitch:
-// "말 → 블록 생성 → 다시 말 → 수정". Everything is real (headless scratch-vm,
+// End-to-end seam test for the bidirectional edit loop, the contest pitch:
+// "speak → generate blocks → speak again → edit". Everything is real (headless scratch-vm,
 // real compile/decompile/diff/apply); only the network fetch is mocked. This is
 // the one path the per-module suites don't exercise, and it catches shape drift
 // between parseDSL output and compile/applyEdit input.
@@ -20,10 +20,10 @@ const fetchReturning = scripts => async () => ({
 const asSet = scripts => scripts.map(s => JSON.stringify(s)).sort();
 
 describe('generate -> edit loop (llm -> dsl -> edit, headless)', () => {
-    test('말→블록 생성→다시 말→수정 closes end to end', async () => {
+    test('speak → generate → speak again → edit closes end to end', async () => {
         const {vm, target} = makeHeadlessVM();
 
-        // 1) 말 → 블록 생성
+        // 1) speak → generate blocks
         const generated = await requestScripts(
             {apiKey: 'k', instruction: 'walk forward'},
             fetchReturning([flag([['move', 10]])])
@@ -31,7 +31,7 @@ describe('generate -> edit loop (llm -> dsl -> edit, headless)', () => {
         await vm.shareBlocksToTarget(compile(generated), target.id);
         expect(decompile(target.blocks)).toEqual([flag([['move', 10]])]);
 
-        // 2) 다시 말 → 수정 (현재 프로그램을 decompile 해 hat-id 정렬 유지)
+        // 2) speak again → edit (decompile the current program to keep hat-id ordering)
         const current = decompile(target.blocks);
         const edited = await requestScripts(
             {apiKey: 'k', instruction: 'also say hi', currentScripts: current},

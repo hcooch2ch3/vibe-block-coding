@@ -1,11 +1,12 @@
 /**
- * AI 하니스 — dev 콘솔 훅 + 재사용 가능한 generate/edit 글루.
+ * AI harness: dev console hooks + reusable generate/edit glue.
  *
- * generate/edit 는 "말 → 블록" 과 "말 → 편집" 을 vm 위에서 한 번에 굴리는 얇은
- * 래퍼다. llm.requestScripts → dsl.compile/decompile → edit.applyEdit 를 엮을 뿐,
- * 로직은 각 모듈에 있다. 라이브 스모크(콘솔)와 2주차 UI 가 같은 함수를 쓴다.
+ * generate/edit are thin wrappers that run "speech → blocks" and "speech → edit"
+ * over the vm in one shot. They just wire llm.requestScripts → dsl.compile/decompile
+ * → edit.applyEdit; the logic lives in each module. The live smoke test (console)
+ * and the week-2 UI use the same functions.
  *
- * installDevConsole 은 dev 빌드에서 window.vibe 로 이 함수들을 노출한다.
+ * installDevConsole exposes these functions as window.vibe in dev builds.
  */
 
 import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
@@ -14,11 +15,12 @@ import {applyEdit, applyOps, editsToOps} from './edit';
 import {hashProgram, targetMatchesBase} from './base-hash';
 
 /**
- * 자연어 지시로 블록을 새로 만들어 현재 편집 대상에 심고, 결과 DSL 을 돌려준다.
- * @param {VirtualMachine} vm - editingTarget 에 블록을 심음
+ * Build new blocks from a natural-language instruction, plant them in the current
+ * edit target, and return the resulting DSL.
+ * @param {VirtualMachine} vm - plants blocks into editingTarget
  * @param {object} opts - {apiKey, instruction, model?, targetId?}
- * @param {Function} fetchImpl - 주입용 fetch (생략 시 전역 fetch)
- * @returns {Promise<Array<object>>} 심은 뒤 decompile 한 DSL 스크립트 배열
+ * @param {Function} fetchImpl - injectable fetch (omit to use global fetch)
+ * @returns {Promise<Array<object>>} DSL script array decompiled after planting
  */
 export const generate = async function (vm, opts, fetchImpl) {
     const target = opts.targetId ? vm.runtime.getTargetById(opts.targetId) : vm.editingTarget;
@@ -33,11 +35,12 @@ export const generate = async function (vm, opts, fetchImpl) {
 };
 
 /**
- * 현재 프로그램을 LLM 에게 보여주고 자연어 지시로 수정한 뒤 변경분만 주입한다.
- * @param {VirtualMachine} vm - editingTarget 을 수정
+ * Show the current program to the LLM, edit it from a natural-language instruction,
+ * then inject only the changed parts.
+ * @param {VirtualMachine} vm - edits editingTarget
  * @param {object} opts - {apiKey, instruction, model?, targetId?}
- * @param {Function} fetchImpl - 주입용 fetch (생략 시 전역 fetch)
- * @returns {Promise<Array<object>>} 수정 뒤 decompile 한 DSL 스크립트 배열
+ * @param {Function} fetchImpl - injectable fetch (omit to use global fetch)
+ * @returns {Promise<Array<object>>} DSL script array decompiled after the edit
  */
 export const edit = async function (vm, opts, fetchImpl) {
     const target = opts.targetId ? vm.runtime.getTargetById(opts.targetId) : vm.editingTarget;
@@ -205,9 +208,9 @@ export const applyProposal = async function (vm, proposal) {
 };
 
 /**
- * dev 빌드 전용: window.vibe 로 파이프라인을 노출한다. 브라우저 콘솔에서
- * `await vibe.smoke('sk-ant-...')` 로 생성→편집 루프를 실제 API 로 검증할 수 있다.
- * @param {VirtualMachine} vm - 현재 vm 인스턴스
+ * Dev builds only: expose the pipeline as window.vibe. From the browser console,
+ * `await vibe.smoke('sk-ant-...')` verifies the generate → edit loop against the real API.
+ * @param {VirtualMachine} vm - current vm instance
  * @returns {void}
  */
 export const installDevConsole = function (vm) {
@@ -226,7 +229,7 @@ export const installDevConsole = function (vm) {
             measureBuildRate(vm, {apiKey, prompts, model}),
         evalEdits: (apiKey, cases, model) =>
             measureEditQuality(vm, {apiKey, cases, model}),
-        // 라이브 스모크: 생성 한 번, 편집 한 번. before/after DSL 을 로그로 남긴다.
+        // Live smoke test: one generate, one edit. Logs the before/after DSL.
         smoke: async (apiKey, model) => {
             const before = await generate(
                 vm, {apiKey, model, instruction: 'make the cat walk and turn'});

@@ -7,8 +7,8 @@ const defaultVM = new VM();
 defaultVM.attachStorage(storage);
 const initialState = defaultVM;
 
-// 개발 모드 전용: 콘솔에서 AI 블록 주입/생성·편집 루프를 실험할 수 있게 노출.
-// window.vm = vm 인스턴스, window.vibe = AI 파이프라인(generate/edit/smoke).
+// Dev-mode only: exposes the AI block-injection and generate/edit loop for console experiments.
+// window.vm = the vm instance, window.vibe = the AI pipeline (generate/edit/smoke).
 if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
     window.vm = defaultVM;
     installDevConsole(defaultVM);

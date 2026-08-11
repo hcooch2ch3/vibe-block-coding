@@ -1,16 +1,19 @@
 /**
- * AI 하니스 — BYOK LLM 호출.
+ * AI harness: BYOK LLM calls.
  *
- * 브라우저에서 사용자의 키로 Anthropic Messages API 를 직접 부른다(BYOK). LLM 은
- * 아이의 자연어를 미니 DSL(dsl.js 참고)로 바꿔 돌려주고, 그 DSL 이 compile/diff 를
- * 거쳐 블록이 된다. 생성(자연어→DSL)과 편집(현재 DSL + 지시→새 DSL)이 같은 경로다.
+ * Calls the Anthropic Messages API directly from the browser with the user's key
+ * (BYOK). The LLM turns the child's natural language into a mini DSL (see dsl.js),
+ * and that DSL goes through compile/diff to become blocks. Generation
+ * (natural language→DSL) and editing (current DSL + instruction→new DSL) share
+ * the same path.
  *
- *   buildSystemPrompt / buildUserPrompt : 프롬프트 조립 (순수)
- *   parseDSL                            : 모델 텍스트에서 DSL 추출·검증 (순수)
- *   requestScripts                      : fetch 로 호출 (fetch 주입 가능 → 테스트)
+ *   buildSystemPrompt / buildUserPrompt : assemble the prompt (pure)
+ *   parseDSL                            : extract and validate DSL from model text (pure)
+ *   requestScripts                      : call via fetch (fetch is injectable → testable)
  *
- * 브라우저 직접 호출이라 `anthropic-dangerous-direct-browser-access` 헤더가 필요하고,
- * 키는 로컬(사용자 소유)에 머문다. 기본 모델은 비용 민감한 아동 도구라 Haiku 4.5.
+ * Direct browser calls need the `anthropic-dangerous-direct-browser-access`
+ * header, and the key stays local (owned by the user). The default model is
+ * Haiku 4.5 since this is a cost-sensitive children's tool.
  */
 
 import {OPMAP} from './dsl';
@@ -88,7 +91,7 @@ const fetchWithTimeout = async function (doFetch, url, options, timeoutMs) {
             new Promise((resolve, reject) => {
                 timer = setTimeout(() => {
                     if (controller) controller.abort();
-                    reject(new Error('LLM 호출 시간 초과'));
+                    reject(new Error('LLM call timed out'));
                 }, timeoutMs);
             })
         ]);
@@ -98,8 +101,9 @@ const fetchWithTimeout = async function (doFetch, url, options, timeoutMs) {
 };
 
 /**
- * 지원 DSL 어휘를 OPMAP 에서 뽑아 모델에게 규칙을 설명하는 시스템 프롬프트.
- * @returns {string} 시스템 프롬프트
+ * System prompt that pulls the supported DSL vocabulary from OPMAP and explains
+ * the rules to the model.
+ * @returns {string} system prompt
  */
 export const buildSystemPrompt = function () {
     const lines = Object.entries(OPMAP).map(([name, spec]) => {
@@ -125,11 +129,12 @@ export const buildSystemPrompt = function () {
 };
 
 /**
- * 사용자 프롬프트 조립. currentScripts 가 있으면 편집(현재 프로그램 동봉), 없으면 생성.
+ * Assemble the user prompt. With currentScripts it edits (embeds the current
+ * program), without it generates.
  * Optional history is prepended as recent conversation context (text only, no block payloads).
  * @param {object} opts - object with instruction string, optional currentScripts array, and optional history array
  * @param {Array} [opts.history] - recent turns oldest first, each with role and text fields
- * @returns {string} 사용자 메시지 본문
+ * @returns {string} user message body
  */
 export const buildUserPrompt = function (opts) {
     const {instruction, currentScripts, history} = opts;
@@ -168,7 +173,7 @@ const historyPreamble = function (history) {
  * `find` token so the model can COPY it into a modify/remove edit (rather than
  * derive it — no format ambiguity). Empty program → create wording.
  * @param {object} opts - {instruction, currentScripts?, history?}
- * @returns {string} 사용자 메시지 본문
+ * @returns {string} user message body
  */
 export const buildTurnUserPrompt = function (opts) {
     const {instruction, currentScripts, history} = opts;
@@ -189,15 +194,16 @@ export const buildTurnUserPrompt = function (opts) {
     return [...pre, `The program is empty. Create it so that: ${instruction}`].join('\n');
 };
 
-// 코드펜스/산문에 섞인 응답에서 첫 JSON 값(배열 또는 객체) 문자열만 잘라낸다.
+// Slice out just the first JSON value (array or object) from a reply that may be
+// mixed with code fences or prose.
 const sliceJSON = function (text) {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
     const src = fenced ? fenced[1] : text;
     const start = src.search(/[[{]/);
-    if (start === -1) throw new Error('LLM 응답에서 JSON 을 찾지 못함');
+    if (start === -1) throw new Error('no JSON found in the LLM response');
     const close = src[start] === '[' ? ']' : '}';
     const end = src.lastIndexOf(close);
-    if (end < start) throw new Error('LLM 응답의 JSON 이 닫히지 않음');
+    if (end < start) throw new Error('the JSON in the LLM response is not closed');
     return src.slice(start, end + 1);
 };
 
@@ -210,36 +216,37 @@ const sliceJSON = function (text) {
  */
 export const validateScripts = function (scripts) {
     const validateStep = function validate (step, isLast) {
-        if (!Array.isArray(step)) throw new Error('스텝은 배열이어야 합니다');
+        if (!Array.isArray(step)) throw new Error('step must be an array');
         const [op, ...args] = step;
         const spec = OPMAP[op];
-        if (!spec) throw new Error(`미지원 opcode: ${op}`);
-        // 값 인자(하위 스택 앞)는 숫자/문자만 — 배열/객체가 NUM/TEXT 필드로 새는 것 방지.
+        if (!spec) throw new Error(`unsupported opcode: ${op}`);
+        // Value args (before the substack) must be number/string only, to keep
+        // arrays/objects from leaking into NUM/TEXT fields.
         args.slice(0, spec.inputs.length).forEach(a => {
             if (typeof a !== 'number' && typeof a !== 'string') {
-                throw new Error(`${op}: 값 인자는 숫자나 문자여야 합니다`);
+                throw new Error(`${op}: value args must be a number or string`);
             }
         });
         if (spec.substack) {
             const sub = args[spec.inputs.length];
             if (args.length !== spec.inputs.length + 1 || !Array.isArray(sub)) {
-                throw new Error(`${op}: 하위 스택 배열(마지막 인자)이 필요합니다`);
+                throw new Error(`${op}: a substack array (last arg) is required`);
             }
             if (spec.cap && !isLast) {
-                throw new Error(`${op} 뒤에는 스텝을 둘 수 없습니다 (cap 블록)`);
+                throw new Error(`${op}: no steps allowed after a cap block`);
             }
             sub.forEach((s, i) => validate(s, i === sub.length - 1));
         } else if (args.length !== spec.inputs.length) {
-            throw new Error(`${op}: 인자 ${spec.inputs.length}개 필요, ${args.length}개 받음`);
+            throw new Error(`${op}: expected ${spec.inputs.length} args, got ${args.length}`);
         }
     };
     scripts.forEach(script => {
         const hatSpec = script && OPMAP[script.hat];
         if (!hatSpec || !hatSpec.hat) {
-            throw new Error(`미지원 hat: ${script && script.hat}`);
+            throw new Error(`unsupported hat: ${script && script.hat}`);
         }
         const body = script.body || [];
-        if (!Array.isArray(body)) throw new Error('body 는 배열이어야 합니다');
+        if (!Array.isArray(body)) throw new Error('body must be an array');
         body.forEach((step, i) => validateStep(step, i === body.length - 1));
     });
     return scripts;
@@ -437,17 +444,17 @@ export const requestTurn = async function (config, fetchImpl) {
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const msg = (err.error && err.error.message) || `HTTP ${res.status}`;
-        throw new Error(`LLM 호출 실패: ${msg}`);
+        throw new Error(`LLM call failed: ${msg}`);
     }
     const data = await res.json();
     return parseEnvelope(extractText(data));
 };
 
 /**
- * 사용자의 키로 Anthropic Messages API 를 호출해 DSL 스크립트를 얻는다.
+ * Call the Anthropic Messages API with the user's key to get DSL scripts.
  * @param {object} config - {apiKey, model?, instruction, currentScripts?}
- * @param {Function} fetchImpl - 주입용 fetch (생략 시 전역 fetch)
- * @returns {Promise<Array<object>>} DSL 스크립트 배열
+ * @param {Function} fetchImpl - injectable fetch (omit to use global fetch)
+ * @returns {Promise<Array<object>>} DSL script array
  */
 export const requestScripts = async function (config, fetchImpl) {
     const {apiKey, model, instruction, currentScripts, endpoint, headers,
@@ -466,7 +473,7 @@ export const requestScripts = async function (config, fetchImpl) {
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const msg = (err.error && err.error.message) || `HTTP ${res.status}`;
-        throw new Error(`LLM 호출 실패: ${msg}`);
+        throw new Error(`LLM call failed: ${msg}`);
     }
     const data = await res.json();
     return parseDSL(extractText(data));

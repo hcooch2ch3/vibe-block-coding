@@ -1,30 +1,32 @@
 /**
- * AI 하니스 — 편집(diff/apply).
+ * AI harness: editing (diff/apply).
  *
- * 양방향 편집 루프의 신규성 절반: 현재 프로그램을 DSL로 역변환해 LLM에게 수정을
- * 맡긴 뒤, 옛 DSL과 새 DSL을 비교해 **바뀐 스크립트만** 블록으로 다시 심는다.
- * 손대지 않은 스크립트는 vm 안에서 그대로 살아남는다(= 진짜 "기존 보존").
+ * Half the novelty of the bidirectional edit loop: decompile the current program
+ * to DSL, hand it to the LLM to modify, then compare old DSL against new DSL and
+ * re-plant only the changed scripts as blocks. Untouched scripts stay alive as-is
+ * inside the vm (that is real "preserve existing").
  *
- *   diff:      옛 DSL[] vs 새 DSL[] → per-script 연산 목록 (순수 함수, 테스트 용이)
- *   applyEdit: 그 연산을 scratch-vm 대상에 적용 (변경분만 주입)
+ *   diff:      old DSL[] vs new DSL[] → per-script op list (pure function, easy to test)
+ *   applyEdit: apply those ops to a scratch-vm target (inject only the changes)
  *
- * MVP 세분성 = per-script 통째 재구성. 스크립트 하나 안에서 블록 하나만 바뀌어도
- * 그 스크립트는 통째로 다시 컴파일된다(element-level splice는 후속 과제). 매칭은
- * 배열 위치(index) 기반 — 재정렬/중복 hat 은 "전부 바뀜"으로 degrade 한다.
+ * MVP granularity = whole per-script rebuild. If one block inside a script changes,
+ * the whole script is recompiled (element-level splice is future work). Matching is
+ * by array position (index): reorders and duplicate hats degrade to "all changed".
  */
 
 import {compileScript, scriptHatIds, normalizeScript} from './dsl';
 
-// 두 DSL 스크립트가 의미상 같은지 비교. 인자를 decompile 과 같은 공간으로 정규화한 뒤
-// 비교하므로 LLM 이 숫자를 "10" 문자열로 돌려줘도 값이 같으면 동일로 본다.
+// Compare whether two DSL scripts are semantically equal. Args are normalized into
+// the same space as decompile before comparing, so if the LLM returns a number as
+// the string "10", equal values are still treated as identical.
 const sameScript = (a, b) =>
     JSON.stringify(normalizeScript(a)) === JSON.stringify(normalizeScript(b));
 
 /**
- * 옛/새 DSL 스크립트 배열을 위치 기반으로 비교해 연산 목록을 만든다.
- * @param {Array<object>} oldScripts - decompile(현재 블록) 결과
- * @param {Array<object>} newScripts - LLM 이 돌려준 수정본
- * @returns {Array<object>} keep | replace | add | remove 연산 목록
+ * Compare old/new DSL script arrays by position to build an op list.
+ * @param {Array<object>} oldScripts - result of decompile(current blocks)
+ * @param {Array<object>} newScripts - the edited version returned by the LLM
+ * @returns {Array<object>} keep | replace | add | remove op list
  */
 export const diff = function (oldScripts, newScripts) {
     const ops = [];
@@ -101,7 +103,7 @@ export const editsToOps = function (edits, current) {
     return ops;
 };
 
-// 컴파일된 블록 배열에서 top-level 블록의 좌표를 지정 위치로 옮긴다(재구성 시 위치 보존).
+// Move the top-level block's coordinates in a compiled block array to a given position (preserve position on rebuild).
 const placeAt = function (compiled, x, y) {
     const top = compiled.find(b => b.topLevel);
     if (top) {
@@ -112,32 +114,33 @@ const placeAt = function (compiled, x, y) {
 };
 
 /**
- * 미리 만들어진 op 목록(add/replace/remove; keep 은 op 부재로 암시)을 scratch-vm
- * 대상에 적용한다. applyEdit 에서 추출 — id 기반 편집 경로가 위치 diff 없이 ops 를
- * 바로 넘길 수 있게 한다. 바뀐 스크립트만 건드리고 나머지는 vm 안에서 그대로 산다.
+ * Apply a prebuilt op list (add/replace/remove; keep is implied by op absence) to a
+ * scratch-vm target. Extracted from applyEdit so the id-based edit path can pass ops
+ * directly without a positional diff. Touch only the changed scripts; the rest stay
+ * alive inside the vm.
  *
- * 주의: 프로젝트가 실행 중이면 먼저 멈추고 호출할 것(deleteBlock 은 도는 스레드를
- * 정리하지 않음 — scratch-vm 의 @todo). op.index(replace/remove)는 라이브
- * scriptHatIds 순서 기준 0-based — 호출자(applyProposal 의 stale guard)가 라이브
- * 순서 == base 스냅샷 순서를 보장한다. add 는 index:null.
+ * Note: if the project is running, stop it before calling (deleteBlock does not clean
+ * up running threads, a scratch-vm @todo). op.index (replace/remove) is 0-based on the
+ * live scriptHatIds order: the caller (applyProposal's stale guard) guarantees live
+ * order == base snapshot order. add uses index:null.
  *
- * @param {VirtualMachine} vm - 편집을 적용할 vm
+ * @param {VirtualMachine} vm - the vm to apply edits to
  * @param {Array<object>} ops - {type:'add'|'replace'|'remove', index, script?}
- * @param {string} [targetId] - 편집할 스프라이트 id (생략 시 현재 editingTarget — 콘솔 스모크 하위호환).
- * @returns {Promise<Array>} 적용한 연산 목록
+ * @param {string} [targetId] - sprite id to edit (defaults to current editingTarget, console smoke back-compat).
+ * @returns {Promise<Array>} the applied op list
  */
 export const applyOps = async function (vm, ops, targetId) {
-    // 고정된 targetId 가 있는데 그 스프라이트가 (요청 중 삭제로) 사라졌으면 fail-closed:
-    // editingTarget 로 폴백하지 않고 던진다 → 다른 스프라이트 오염 방지. targetId 없으면
-    // 현재 editingTarget(콘솔 스모크 하위호환).
+    // If a pinned targetId is given but its sprite is gone (deleted mid-request), fail-closed:
+    // throw instead of falling back to editingTarget → avoid corrupting a different sprite. If no
+    // targetId, use the current editingTarget (console smoke back-compat).
     const target = targetId ? vm.runtime.getTargetById(targetId) : vm.editingTarget;
     if (!target) throw new Error('applyOps: pinned target no longer exists');
     const blocks = target.blocks;
-    // op.index 와 인덱스가 일치하는 hat id 스냅샷 — 삭제로 순서가 흔들려도 id 로 짚는다.
-    // 호출자(applyProposal 의 stale guard)가 라이브 순서 == base 스냅샷 순서를 보장한다.
+    // Snapshot of hat ids indexed to match op.index: even if deletion shifts the order, we point by id.
+    // The caller (applyProposal's stale guard) guarantees live order == base snapshot order.
     const hatIds = scriptHatIds(blocks);
 
-    // 옮겨 심을 새 스크립트들을 먼저 컴파일(삭제 전에 옛 좌표를 읽어 보존).
+    // Compile the new scripts to plant first (read old coordinates before deletion to preserve them).
     const toShare = [];
     for (const op of ops) {
         if (op.type === 'add') {
@@ -148,14 +151,14 @@ export const applyOps = async function (vm, ops, targetId) {
         }
     }
 
-    // 바뀐/사라진 옛 스크립트 삭제(hat 삭제 → next 재귀로 스택 통째 정리).
+    // Delete the changed/removed old scripts (delete the hat → next recursion cleans up the whole stack).
     for (const op of ops) {
         if (op.type === 'replace' || op.type === 'remove') {
             blocks.deleteBlock(hatIds[op.index]);
         }
     }
 
-    // 새/수정 스크립트 주입.
+    // Inject the new/modified scripts.
     for (const compiled of toShare) {
         await vm.shareBlocksToTarget(compiled, target.id);
     }
@@ -165,12 +168,12 @@ export const applyOps = async function (vm, ops, targetId) {
 };
 
 /**
- * 옛/새 DSL 을 위치 기반 diff 로 비교해 적용한다(레거시: window.vibe 스모크 + dev-console edit()).
- * @param {VirtualMachine} vm - 편집을 적용할 vm
- * @param {Array<object>} oldScripts - 편집 전 DSL (decompile 결과)
- * @param {Array<object>} newScripts - LLM 이 돌려준 수정본 DSL
- * @param {string} [targetId] - 편집할 스프라이트 id (생략 시 현재 editingTarget)
- * @returns {Promise<Array>} 적용한 연산 목록
+ * Compare old/new DSL by positional diff and apply (legacy: window.vibe smoke + dev-console edit()).
+ * @param {VirtualMachine} vm - the vm to apply edits to
+ * @param {Array<object>} oldScripts - pre-edit DSL (decompile result)
+ * @param {Array<object>} newScripts - the edited DSL returned by the LLM
+ * @param {string} [targetId] - sprite id to edit (defaults to current editingTarget)
+ * @returns {Promise<Array>} the applied op list
  */
 export const applyEdit = function (vm, oldScripts, newScripts, targetId) {
     return applyOps(vm, diff(oldScripts, newScripts), targetId);
