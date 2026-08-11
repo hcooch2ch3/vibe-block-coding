@@ -6,7 +6,7 @@
 // timing here so the effect is cancelable (re-apply / unmount).
 //
 // Pure with respect to its dependencies: the caller passes the Blockly workspace
-// (or null), the resolved CSS class name, and — in tests — a fake scheduler. It
+// (or null), the resolved CSS class name, and, in tests, a fake scheduler. It
 // never throws (a torn-down block can throw on getSvgRoot); every touch is guarded
 // and we fail open (a broken animation must never break Apply).
 
@@ -35,7 +35,7 @@ const svgRootFor = function (workspace, id) {
  * @param {object|null} workspace - Blockly workspace (getBlockById), or null
  * @param {Array<string>} topIds - hat block ids to pulse
  * @param {object} [opts] - {className, glowMs, reducedMotion, setTimeoutFn, clearTimeoutFn}
- * @returns {Function} cancel — removes the class + clears the timer (always safe to call)
+ * @returns {Function} cancel, removes the class + clears the timer (always safe to call)
  */
 export const glowChangedBlocks = function (workspace, topIds, opts) {
     const o = opts || {};
@@ -56,22 +56,22 @@ export const glowChangedBlocks = function (workspace, topIds, opts) {
             const root = svgRootFor(workspace, id);
             if (root && root.classList) {
                 // runGlow() cancels the prior glow (removing the class) before this
-                // runs, so the class is freshly added here — one clean pulse.
+                // runs, so the class is freshly added here, one clean pulse.
                 root.classList.add(className);
                 glowed.push(root);
             }
-        } catch (e) { /* dead id / torn-down SVG — fail open */ }
+        } catch (e) { /* dead id / torn-down SVG, fail open */ }
     }
     if (glowed.length === 0) return noop;
 
     // Remove the class from the roots we captured. Shared by the timer (normal
     // expiry) AND cancel(), so cancelling on a re-glow or an unmount within the
-    // window never STRANDS a pulse — it stops it rather than just dropping the timer.
+    // window never STRANDS a pulse, it stops it rather than just dropping the timer.
     const unglow = function () {
         for (const root of glowed) {
             try {
                 root.classList.remove(className);
-            } catch (e) { /* element detached since — nothing to remove */ }
+            } catch (e) { /* element detached since, nothing to remove */ }
         }
     };
     const timer = setTimeoutFn(unglow, glowMs);

@@ -3,8 +3,8 @@ import {mount} from 'enzyme';
 
 // The plain grip-math tests (block-preview.test.jsx) use shallow, so Blockly
 // never injects. Here we MOUNT with a stubbed scratch-blocks so the real risk
-// surface — inject/measure/anchor/svgResize/dispose and the mainWorkspace
-// snapshot-restore — is exercised and guarded against regression. Each test
+// surface, inject/measure/anchor/svgResize/dispose and the mainWorkspace
+// snapshot-restore, is exercised and guarded against regression. Each test
 // gets a fresh module (resetModules) so BlockPreview's memoized SB cache is
 // clean and per-test stub behavior isn't leaked.
 const SENTINEL = {name: 'editor-main-workspace'};

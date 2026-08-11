@@ -48,7 +48,7 @@ describe('VibePrompt container', () => {
         clearKey.mockClear();
     });
 
-    describe('instruction submission — propose/apply gate', () => {
+    describe('instruction submission, propose/apply gate', () => {
         test('submit appends a user turn and a pending proposal turn without injecting', async () => {
             const vm = makeVm({});
             const proposeSpy = jest.spyOn(devConsole, 'propose')
@@ -126,12 +126,12 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.turns[0].status).toBe('applied');
         });
 
-        test('a glow throw during Apply is swallowed — status stays applied (fail-open catch)', async () => {
+        test('a glow throw during Apply is swallowed, status stays applied (fail-open catch)', async () => {
             const vm = makeVm({});
             jest.spyOn(devConsole, 'applyProposal')
                 .mockImplementation(() => Promise.resolve({ok: true, changedTopIds: ['hat-1']}));
-            // Force runGlow's body to throw so its try/catch — the actual fail-open
-            // guard — is the thing under test (not the null-workspace early return).
+            // Force runGlow's body to throw so its try/catch, the actual fail-open
+            // guard, is the thing under test (not the null-workspace early return).
             jest.spyOn(glowModule, 'glowChangedBlocks').mockImplementation(() => {
                 throw new Error('boom');
             });
@@ -182,7 +182,7 @@ describe('VibePrompt container', () => {
 
         test('M2 BUSY-LOCK: submit/runProposeFor is blocked while handleApply is in flight', async () => {
             const vm = makeVm({});
-            // applyProposal never resolves — handleApply stays in flight
+            // applyProposal never resolves, handleApply stays in flight
             jest.spyOn(devConsole, 'applyProposal')
                 .mockImplementation(() => new Promise(function () {}));
             const proposeSpy = jest.spyOn(devConsole, 'propose')
@@ -191,7 +191,7 @@ describe('VibePrompt container', () => {
             const turn = {id: 11, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
             wrapper.setState({turns: [turn]});
             wrapper.instance().handleApply(turn); // starts apply, sets busy=true
-            // runProposeFor checks this.state.busy — should be blocked
+            // runProposeFor checks this.state.busy, should be blocked
             wrapper.instance().runProposeFor('walk', 'sprite-a');
             await flushPromises();
             expect(proposeSpy).not.toHaveBeenCalled();
@@ -499,7 +499,7 @@ describe('VibePrompt container', () => {
             const wrapper = render(vm);
             wrapper.setState({position: {x: 100, y: 80}});
             wrapper.instance().resizeCtx = {dir: 'se', left: 100, top: 80, right: 400, bottom: 400};
-            // A TouchEvent carries no clientX/clientY on itself — the point lives in
+            // A TouchEvent carries no clientX/clientY on itself, the point lives in
             // touches[0]. The handler must read from there for tablet resize to work.
             wrapper.instance().handleResizeMove({touches: [{clientX: 460, clientY: 500}]});
             expect(wrapper.instance().state.size).toEqual({w: 360, h: 420}); // 460-100, 500-80

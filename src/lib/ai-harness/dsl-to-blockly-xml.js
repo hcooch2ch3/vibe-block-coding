@@ -32,7 +32,7 @@ const chainSteps = function (steps) {
         const sub = args[nInputs] || [];
         if (sub.length) inner += `<statement name="${spec.substack}">${chainSteps(sub)}</statement>`;
     }
-    // cap blocks (forever) terminate the stack — never chain a sibling after them
+    // cap blocks (forever) terminate the stack, never chain a sibling after them
     const nextXml = (!spec.cap && restXml) ? `<next>${restXml}</next>` : '';
     return `<block type="${spec.opcode}">${inner}${nextXml}</block>`;
 };
@@ -49,7 +49,7 @@ export const scriptToXml = function (script) {
         const nextXml = bodyXml ? `<next>${bodyXml}</next>` : '';
         top = `<block type="${hatSpec.opcode}">${nextXml}</block>`;
     } else {
-        top = bodyXml; // no hat (defensive) — render the body alone
+        top = bodyXml; // no hat (defensive), render the body alone
     }
     return `<xml xmlns="http://www.w3.org/1999/xhtml">${top}</xml>`;
 };

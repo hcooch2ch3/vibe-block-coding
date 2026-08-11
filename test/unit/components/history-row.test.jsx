@@ -50,7 +50,7 @@ test('a replace op previews as updated', () => {
 
 test('an add op previews as added; kept scripts (no op) never re-appear', () => {
     // The reported bug: "say hello" already applied, then "walk around" proposed.
-    // The proposal now carries ONLY the add op for walk — the kept say-hello has no op.
+    // The proposal now carries ONLY the add op for walk, the kept say-hello has no op.
     const walk = {hat: 'when_flag', body: [['forever', [['move', 10], ['turn_right', 15]]]]};
     const turn = {
         id: 8, role: 'ai', kind: 'proposal', status: 'pending', text: 'Now it walks',

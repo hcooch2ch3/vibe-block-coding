@@ -59,9 +59,9 @@ const hashStr = function (str) {
  * Normalization (normalizeScript) makes "10" and 10 hash equally. Two scripts
  * collide only if byte-identical after normalization (then editing either is
  * harmless) or on a negligibly rare 32-bit hash collision. The app prints this
- * next to each numbered script; the model copies
- * it into an edit's `find`, letting the app verify the model targeted the script
- * it meant (defends against a plausible-but-wrong id).
+ * next to each numbered script; the model copies it into an edit's `find`, so
+ * the app can confirm the model targeted the script it meant (defends against a
+ * plausible-but-wrong id).
  * @param {object} script - {hat, body}
  * @returns {string} short base36 fingerprint ('' for a falsy script)
  */

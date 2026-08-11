@@ -120,7 +120,7 @@ export const buildSystemPrompt = function () {
         'Loops take a nested array of steps as their LAST element:',
         '  ["repeat", 10, [["move", 10], ["turn", 15]]]',
         '  ["forever", [["move", 10]]]',
-        'A "forever" must be the LAST step in its list — nothing can follow it.',
+        'A "forever" must be the LAST step in its list. Nothing can follow it.',
         '',
         'Reply with ONLY a JSON array of scripts. Each script is',
         '{"hat": "<hat step>", "body": [["step", ...args], ...]}.',
@@ -170,8 +170,8 @@ const historyPreamble = function (history) {
 
 /**
  * Envelope turn prompt. Numbers the current program and prints each script's
- * `find` token so the model can COPY it into a modify/remove edit (rather than
- * derive it — no format ambiguity). Empty program → create wording.
+ * `find` token so the model can COPY it into a modify/remove edit instead of
+ * deriving it (no format ambiguity). Empty program → create wording.
  * @param {object} opts - {instruction, currentScripts?, history?}
  * @returns {string} user message body
  */
@@ -308,13 +308,13 @@ export const parseEnvelope = function (text) {
                     } else if (ch === '\\') {
                         escaped = true;
                     } else if (ch === '"') {
-                        // Unescaped closing quote — string ended. If we were at depth 1,
-                        // test from the string's opening '"' for a top-level "answer" key.
+                        // Unescaped closing quote, so the string ended. If we were at
+                        // depth 1, test from the string's opening '"' for a top-level "answer" key.
                         if (depth === 1) {
                             const tail = src.slice(stringStart);
                             const m = tail.match(answerKeyRe);
                             if (m) {
-                                // Found top-level "answer" — try to decode the value.
+                                // Found the top-level "answer". Try to decode the value.
                                 try {
                                     return JSON.parse(`"${m[1]}"`);
                                 } catch (e2) {
@@ -409,11 +409,11 @@ export const buildEnvelopeSystemPrompt = function () {
         '  {"action": "modify", "id": <id>, "find": "<find token of #id>", "script": {...}}',
         '  {"action": "remove", "id": <id>, "find": "<find token of #id>"}',
         'For modify/remove, COPY the find token printed next to script #id in the list',
-        'verbatim (do not invent or recompute it) — it is a safety check; if it does not',
+        'verbatim (do not invent or recompute it). It is a safety check; if it does not',
         'match, your edit is ignored.',
-        'Only include scripts that CHANGE — every script you do not mention is kept.',
-        'If the child wants behavior X INSTEAD of Y, modify or remove the script doing Y —',
-        'do NOT just add X. To add a behavior alongside the rest, use "add".',
+        'Only include scripts that CHANGE. Every script you do not mention is kept.',
+        'If the child wants behavior X INSTEAD of Y, modify or remove the script doing Y.',
+        'Do NOT just add X. To add a behavior alongside the rest, use "add".',
         'No prose outside the JSON, no code fences.'
     ].join('\n');
 };

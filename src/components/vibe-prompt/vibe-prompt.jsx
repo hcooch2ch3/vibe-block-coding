@@ -158,7 +158,7 @@ const messages = defineMessages({
     },
     freeIntro: {
         id: 'vibe.prompt.freeIntro',
-        defaultMessage: 'No key needed — just start making things!',
+        defaultMessage: 'No key needed, just start making things!',
         description: 'Explanation shown when the free connection mode is selected'
     },
     startFree: {
@@ -199,7 +199,7 @@ const messages = defineMessages({
 });
 
 // One segment of the connection-mode toggle. A bound handler reports its value
-// up (no inline arrow — project lint forbids react/jsx-no-bind). Uses inline
+// up (no inline arrow, project lint forbids react/jsx-no-bind). Uses inline
 // styles so it needs no new CSS-module classes.
 const modeBtnStyle = on => ({
     flex: 1,
@@ -276,7 +276,7 @@ ChipButton.propTypes = {
 };
 
 // The three example prompts, each with a display-only emoji. Emoji is a
-// render-time prefix (ChipButton) — never part of the translated label, so
+// render-time prefix (ChipButton), never part of the translated label, so
 // onChipClick receives the plain sentence.
 const EXAMPLE_CHIPS = [
     {msg: messages.chipWalk, emoji: '🚶'},
@@ -285,7 +285,7 @@ const EXAMPLE_CHIPS = [
 ];
 
 // Shared by the welcome and the sheet. `disabled` greys chips while a request is
-// in flight (only relevant in the sheet — the welcome never coexists with busy).
+// in flight (only relevant in the sheet, the welcome never coexists with busy).
 const renderExampleChips = (intl, onChipClick, disabled) => (
     EXAMPLE_CHIPS.map(({msg, emoji}) => (
         <ChipButton
@@ -300,7 +300,7 @@ const renderExampleChips = (intl, onChipClick, disabled) => (
 );
 
 // Empty-chat onboarding surface: fills the conversation area with a friendly
-// prompt + the example chips. Pure render — shown when turns.length === 0.
+// prompt + the example chips. Pure render, shown when turns.length === 0.
 const WelcomeExamples = ({intl, onChipClick}) => (
     <div className={styles.welcome}>
         <div className={styles.welcomeTitle}>
@@ -345,8 +345,8 @@ class ExampleSheet extends React.Component {
         // container) so the modal Tab-trap has a stable first edge and shift+Tab can't
         // slip back to the covered conversation.
         // preventScroll: the sheet starts translated off-screen (slide-up animation), so
-        // focusing its content must NOT scroll the overflow:hidden card to reveal it —
-        // that scroll jerked the header up and back down during the open animation.
+        // focusing its content must NOT scroll the overflow:hidden card to reveal it.
+        // That scroll jerked the header up and back down during the open animation.
         const focusables = this.sheetRef && this.sheetRef.querySelectorAll('button:not([disabled])');
         if (focusables && focusables.length) {
             focusables[0].focus({preventScroll: true});
@@ -359,7 +359,7 @@ class ExampleSheet extends React.Component {
         document.removeEventListener('keydown', this.handleKeyDown);
         this.removeDragListeners();
         // Restore focus to the opener (💡). Guard: on clear-history the opener unmounts
-        // in the same commit, so prevFocus may be detached — only refocus if still live.
+        // in the same commit, so prevFocus may be detached, only refocus if still live.
         if (this.prevFocus && document.contains(this.prevFocus) && this.prevFocus.focus) {
             this.prevFocus.focus({preventScroll: true});
         }
@@ -398,7 +398,7 @@ class ExampleSheet extends React.Component {
         // Grab the grabber (mouse or touch) and follow the pointer downward.
         // preventDefault suppresses the browser's emulated mouse events (mousedown→
         // mouseup) after a touchstart so they don't re-enter here via onMouseDown and
-        // double-register the window listeners — the same guard the resize grips use.
+        // double-register the window listeners, the same guard the resize grips use.
         // NOTE: relies on React 16 attaching touch listeners NON-passive; on a bump to
         // React 17+ (passive-by-default) this must become a ref-based native touchstart.
         if (e.cancelable) e.preventDefault();
@@ -762,7 +762,7 @@ const VibePromptComponent = props => {
                     >
                         {intl.formatMessage(messages.tryAgain)}
                     </button>
-                    {/* Free mode has no key of its own — if the proxy is down or
+                    {/* Free mode has no key of its own, if the proxy is down or
                         misconfigured, retrying just fails again. Offer an escape to
                         BYOK so the user isn't stuck at a dead end. */}
                     {mode === 'free' && (

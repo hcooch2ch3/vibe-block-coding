@@ -1,7 +1,7 @@
 // Shared test helper: a headless real scratch-vm target.
 //
 // Not a *.test.js file, so jest does not collect it. Tests import makeHeadlessVM()
-// to drive the real vm.shareBlocksToTarget / Blocks code paths (no mocks) — matching
+// to drive the real vm.shareBlocksToTarget / Blocks code paths (no mocks), matching
 // how the editor actually injects blocks at runtime.
 import VM from 'scratch-vm';
 import Sprite from 'scratch-vm/src/sprites/sprite';

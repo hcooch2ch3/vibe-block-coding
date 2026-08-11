@@ -9,7 +9,7 @@
     right: 0;
     bottom: 0;
     pointer-events: none;
-    z-index: $z-index-card; /* 480 — floats above panels, below modals/menus */
+    z-index: $z-index-card; /* 480, floats above panels, below modals/menus */
 }
 
 .card {
@@ -144,7 +144,7 @@
     cursor: pointer;
 }
 
-/* Header button that summons the examples sheet — a soft-tinted pill so a
+/* Header button that summons the examples sheet, a soft-tinted pill so a
    pre-reading child can tell it apart from the bare ⚙️/▾ glyph buttons. */
 .bulb {
     display: flex;
@@ -181,7 +181,7 @@
 
 /* Conversation region (history OR welcome). position:relative is kept as a defensive
    containing block for any future convArea-internal absolutely-positioned child; the
-   B2 examples bottom sheet does NOT anchor here — it anchors to .card and deliberately
+   B2 examples bottom sheet does NOT anchor here, it anchors to .card and deliberately
    covers the composer. */
 .convArea {
     position: relative;
@@ -194,7 +194,7 @@
     min-height: 0;
 }
 
-/* Welcome empty-state — fills the conversation region and centers its content. */
+/* Welcome empty-state, fills the conversation region and centers its content. */
 .welcome {
     flex: 1 1 auto;
     min-height: 0;
@@ -218,7 +218,7 @@
     color: #7d8397;
 }
 
-/* Large soft example chip — shared by the welcome and the sheet. Replaces the
+/* Large soft example chip, shared by the welcome and the sheet. Replaces the
    old thin .chip pill (complaint B: shape). */
 .exampleChip {
     width: 100%;
@@ -245,7 +245,7 @@
     cursor: default;
 }
 
-/* Scrim behind the bottom sheet — dims the history below the header (kept at 40px =
+/* Scrim behind the bottom sheet, dims the history below the header (kept at 40px =
    HEADER_H so the 💡 stays reachable). A real button so tap-to-dismiss is lint-clean.
    It also covers the resize grips, so the card can't be resized while the sheet is
    open (expected for a modal). */
@@ -262,7 +262,7 @@
     cursor: pointer;
 }
 
-/* Bottom sheet (B2) — rises from the card's bottom edge (anchored to .card, the
+/* Bottom sheet (B2), rises from the card's bottom edge (anchored to .card, the
    nearest positioned ancestor), COVERING the composer; drag the grabber down to
    close. .card overflow:hidden clips the slide-in and any drag past the edges. */
 .sheet {
@@ -424,7 +424,7 @@
     color: #575e75;
 }
 
-/* Chat bubble styles — user + AI answer turns */
+/* Chat bubble styles, user + AI answer turns */
 .userBubble {
     align-self: flex-end;
     max-width: 85%;
@@ -489,11 +489,11 @@
     z-index: 1;
 }
 
-/* edges — grips are sized for finger targets on tablets, not just the mouse.
+/* edges, grips are sized for finger targets on tablets, not just the mouse.
    The corner offset (20px) keeps edge strips clear of the corner grips.
    Top grips start below the header band (40px = HEADER_H in ui-prefs.js) so the
-   enlarged touch targets never sit under the drag handle or the ⚙/▾ buttons —
-   the header is drag-only, resizing starts just below it. */
+   enlarged touch targets never sit under the drag handle or the ⚙/▾ buttons.
+   The header is drag-only, resizing starts just below it. */
 .rhN { top: 40px; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
 .rhS { bottom: 0; left: 20px; right: 20px; height: 10px; cursor: ns-resize; }
 .rhE { right: 0; top: 40px; bottom: 20px; width: 10px; cursor: ew-resize; }

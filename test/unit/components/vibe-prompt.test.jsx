@@ -160,7 +160,7 @@ test('a touch drag on the grabber past the threshold closes the sheet', () => {
         <VibePromptComponent {...baseProps} hasKey turns={turns} examplesOpen onToggleExamples={onToggleExamples} />
     );
     // touchstart carries its point in touches[0]; cancelable so the emulated-mouse guard
-    // (preventDefault) runs, proving the touch branch — not just the mouse path.
+    // (preventDefault) runs, proving the touch branch, not just the mouse path.
     wrapper.find('.vibe-sheet-grabber').first().simulate('touchstart', {
         cancelable: true, preventDefault () {}, touches: [{clientY: 100}]
     });

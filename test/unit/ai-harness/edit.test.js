@@ -160,7 +160,7 @@ describe('substack editing', () => {
     });
     test('editing inside a loop rebuilds only that script; sibling + no leak', async () => {
         // applyEdit deletes+re-shares the replaced script, so rebuilt scripts APPEND
-        // to _scripts — array order differs. Assert order-insensitively (asSet) and
+        // to _scripts, array order differs. Assert order-insensitively (asSet) and
         // check the sibling by id (reachableIds), like the FIRST-of-two test above.
         const {vm, target} = makeHeadlessVM();
         await seed(vm, [
@@ -260,7 +260,7 @@ describe('editsToOps (fingerprint-gated, fail-closed)', () => {
         ]);
     });
     test('C2 CLOSED: wrong id whose find describes a DIFFERENT script is dropped', () => {
-        // two forevers with different bodies — the v2 hole. model means #2 (move) but writes id:1.
+        // two forevers with different bodies, the v2 hole. model means #2 (move) but writes id:1.
         const dup = [s([['forever', [['turn', 15]]]]), s([['forever', [['move', 10]]]])];
         expect(editsToOps([{action: 'remove', id: 1, find: fp(dup[1])}], dup)).toEqual([]);
     });

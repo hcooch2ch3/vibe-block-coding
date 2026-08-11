@@ -15,7 +15,7 @@ const messages = defineMessages({
     },
     historyNote: {
         id: 'vibe.prompt.historyNote',
-        defaultMessage: 'This browser only — not saved in the project.',
+        defaultMessage: 'This browser only, not saved in the project.',
         description: 'Clarifies that the history is per-browser, not per-project'
     }
 });

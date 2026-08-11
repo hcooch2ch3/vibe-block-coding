@@ -343,7 +343,7 @@ describe('buildHeaders (per-mode)', () => {
         expect(h['x-api-key']).toBeUndefined();
         expect(h['anthropic-dangerous-direct-browser-access']).toBeUndefined();
     });
-    test('free mode: content-type ONLY (no anthropic headers — proxy CORS allows only content-type)', () => {
+    test('free mode: content-type ONLY (no anthropic headers, proxy CORS allows only content-type)', () => {
         const h = buildHeaders();
         expect(Object.keys(h)).toEqual(['content-type']);
     });

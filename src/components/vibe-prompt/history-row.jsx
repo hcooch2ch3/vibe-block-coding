@@ -25,7 +25,7 @@ const countRemoves = function (preview) {
 };
 
 // Renders one chat turn by shape. Class (not functional) so the Make-it/Apply/Ignore/
-// Rebuild handlers are bound methods closing over `turn` — no inline JSX arrows (jsx-no-bind).
+// Rebuild handlers are bound methods closing over `turn`, no inline JSX arrows (jsx-no-bind).
 class HistoryRow extends React.Component {
     constructor (props) {
         super(props);

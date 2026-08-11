@@ -21,7 +21,7 @@ import {
 
 // Task 0 gate: route the model's envelope through the answer/proposal split
 // (a text reply stays an answer; edits become a pending proposal). Shipped true.
-// WARNING: do NOT flip to false — the false path is NOT yet implemented. With
+// WARNING: do NOT flip to false, the false path is NOT yet implemented. With
 // AUTO_CLASSIFY===false the ternary below routes every turn (including real
 // proposals) to the answer branch and drops the proposal's ops entirely. An explicit
 // Build/Ask control must be built (see plan addendum) BEFORE this flag is flipped.
@@ -95,7 +95,7 @@ class VibePrompt extends React.Component {
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
-            // 'free' | 'key' | 'server' — how requests reach a model.
+            // 'free' | 'key' | 'server', how requests reach a model.
             mode: ep.mode,
             serverUrl: ep.serverUrl,
             serverToken: ep.serverToken,
@@ -119,7 +119,7 @@ class VibePrompt extends React.Component {
     }
     componentDidMount () {
         // Re-clamp on resize so a card near an edge can't be stranded off-screen
-        // (bounds="parent" only constrains an ACTIVE drag) — dual-review Task 4.
+        // (bounds="parent" only constrains an ACTIVE drag), dual-review Task 4.
         window.addEventListener('resize', this.handleResize);
     }
     componentWillUnmount () {
@@ -169,7 +169,7 @@ class VibePrompt extends React.Component {
         if (!key) return;
         // saveKey returns false when storage rejects the write (private mode /
         // quota). Surface it instead of silently claiming success (Task 1 review).
-        // The key itself is the load-bearing write — a failed key save is an error.
+        // The key itself is the load-bearing write, a failed key save is an error.
         if (!saveKey(key)) {
             this.setState({error: true});
             return;
@@ -233,7 +233,7 @@ class VibePrompt extends React.Component {
         });
     }
     handleStartFree () {
-        // Free mode needs no input — persist and drop straight into the chat.
+        // Free mode needs no input, persist and drop straight into the chat.
         saveEndpoint({mode: 'free', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
         this.setState({mode: 'free', editingKey: false, error: false, freeLimited: false});
     }
@@ -260,7 +260,7 @@ class VibePrompt extends React.Component {
                 prevState.position :
                 clampPosition(prevState.position, viewport, DEFAULT_CARD_H);
             // savePrefs defaults to window.localStorage (guarded), matching how
-            // the container calls saveKey — no explicit storage arg. Carry size so
+            // the container calls saveKey, no explicit storage arg. Carry size so
             // a collapse/drag never drops a stored width/height.
             savePrefs({...position, collapsed, w: prevState.size.w, h: prevState.size.h});
             return {collapsed, position, examplesOpen: false};
@@ -268,9 +268,9 @@ class VibePrompt extends React.Component {
     }
     handleToggleExamples () {
         // Transient UI flag for the floating examples sheet (history view only).
-        // Not persisted — the empty-chat welcome is derived from turns.length.
+        // Not persisted, the empty-chat welcome is derived from turns.length.
         // Reset to false by chip-pick / submit / clear / collapse; a card DRAG
-        // deliberately keeps it open (a non-destructive reposition — the sheet
+        // deliberately keeps it open (a non-destructive reposition, the sheet
         // lives inside the card body and moves with it).
         this.setState(prevState => ({examplesOpen: !prevState.examplesOpen}));
     }
@@ -314,7 +314,7 @@ class VibePrompt extends React.Component {
         if (!ctx) return;
         // A touch event carries its point in touches[0], not on the event itself.
         const p = e.touches ? e.touches[0] : e;
-        if (!p) return; // defensive: no active touch point (e.g. touches:[]) — nothing to track
+        if (!p) return; // defensive: no active touch point (e.g. touches:[]), nothing to track
         // On touch, block the page scroll/zoom while dragging a grip.
         if (e.touches && e.cancelable) e.preventDefault();
         const d = ctx.dir;
@@ -344,11 +344,11 @@ class VibePrompt extends React.Component {
         savePrefs({...position, collapsed, w: size.w, h: size.h});
     }
     buildHistoryWindow () {
-        // Last `contextTurns` round-trips of {role, text} ONLY — never the preview
+        // Last `contextTurns` round-trips of {role, text} ONLY, never the preview
         // block payload or baseStamp (they'd bloat the prompt and leak internals).
         // length <= contextTurns*2 (a round-trip is a user turn + an ai turn).
         // Guard n===0: slice(-0) === slice(0) === the whole array, so we must
-        // short-circuit — "remember 0 turns" must send an empty context window.
+        // short-circuit, "remember 0 turns" must send an empty context window.
         const n = this.state.contextTurns;
         const win = n > 0 ? this.state.turns.slice(-n * 2) : [];
         return win.map(t => ({role: t.role, text: t.text}));
@@ -376,7 +376,7 @@ class VibePrompt extends React.Component {
                 // AUTO_CLASSIFY true (shipped) → keep the model's answer/proposal
                 // split. The false path is NOT yet implemented: flipping the flag
                 // currently routes every turn to the answer branch and drops
-                // the proposal's ops — an explicit Build/Ask control must be built
+                // the proposal's ops, an explicit Build/Ask control must be built
                 // (see plan addendum) before the flag is changed.
                 const aiTurn = (AUTO_CLASSIFY && proposal) ?
                     {
@@ -407,8 +407,8 @@ class VibePrompt extends React.Component {
             .catch(err => {
                 // network / parse / empty-envelope / deleted-pinned-sprite (propose
                 // throws) → error state; lastInstruction is kept for Try-again.
-                // In free mode, a proxy rate/daily limit is not a real failure —
-                // surface a "use your own key" nudge instead of a generic error.
+                // In free mode, a proxy rate/daily limit is not a real failure.
+                // Surface a "use your own key" nudge instead of a generic error.
                 const msg = String((err && err.message) || '');
                 const limited = this.state.mode === 'free' &&
                     /daily demo limit|too many requests/i.test(msg);
@@ -446,7 +446,7 @@ class VibePrompt extends React.Component {
         this.runProposeFor(text, targetId);
     }
     handleApply (turn) {
-        // HARD GATE 1 — single-flight: a synchronous instance flag so two Apply
+        // HARD GATE 1, single-flight: a synchronous instance flag so two Apply
         // clicks in the same tick call applyProposal only ONCE (a child mashing the
         // button must not double-inject).
         if (this.applying || !turn || !turn.preview) return;
@@ -458,11 +458,11 @@ class VibePrompt extends React.Component {
             // ok → applied; stale (workspace changed since propose) → stale.
             .then(res => {
                 this.setTurnStatus(turn.id, res.ok ? 'applied' : 'stale');
-                // Surface B glow runs AFTER status is set, isolated in runGlow — a
+                // Surface B glow runs AFTER status is set, isolated in runGlow, a
                 // glow throw can never reach the .catch below and mislabel a good Apply.
                 if (res.ok) this.runGlow(res.changedTopIds);
             })
-            // HARD GATE 2 — catch → Rebuild: applyEdit is non-atomic (delete-loop then
+            // HARD GATE 2, catch → Rebuild: applyEdit is non-atomic (delete-loop then
             // inject-loop, no rollback). A reject may leave the workspace dirty, so
             // mark the turn stale (child rebuilds) rather than crash.
             .catch(err => {
@@ -476,7 +476,7 @@ class VibePrompt extends React.Component {
                 this.setState({busy: false});
             });
     }
-    // Surface B: glow the stacks this Apply changed. Fully isolated + fail-open —
+    // Surface B: glow the stacks this Apply changed. Fully isolated + fail-open:
     // acquiring the workspace or glowing must NEVER throw into the apply-status
     // chain (glowStack throws on a missing id). cat-blocks mode uses a different
     // Blockly singleton whose mainWorkspace may be null → the null-check skips glow.
@@ -512,7 +512,7 @@ class VibePrompt extends React.Component {
     }
     handleContextTurnsChange (n) {
         // Task 10 wires the slider UI; the handler + state live here. Persist the
-        // FULL prefs object — never a partial {contextTurns} write (regression guard).
+        // FULL prefs object, never a partial {contextTurns} write (regression guard).
         const {position, collapsed, size} = this.state;
         this.setState({contextTurns: n});
         savePrefs({...position, collapsed, w: size.w, h: size.h, contextTurns: n});

@@ -19,12 +19,12 @@ const envProxyUrl =
     (typeof process !== 'undefined' && process.env && process.env.VIBE_PROXY_URL) || '';
 export const PROXY_URL = envProxyUrl || 'https://vibe-proxy.vercel.app/api/chat';
 
-// Loud signal if the demo shipped without a real proxy URL — free mode would
+// Loud signal if the demo shipped without a real proxy URL, free mode would
 // otherwise POST to a nonexistent host and fail silently for every visitor.
 if (PROXY_URL.indexOf('YOUR-PROXY') !== -1 && typeof console !== 'undefined' && console.warn) {
     // eslint-disable-next-line no-console
     console.warn(
-        '[vibe] PROXY_URL is still the placeholder — free mode will not work. ' +
+        '[vibe] PROXY_URL is still the placeholder, free mode will not work. ' +
         'Set VIBE_PROXY_URL at build time or edit PROXY_URL in endpoint-store.js.'
     );
 }
@@ -66,7 +66,7 @@ export const loadEndpoint = function (storage = defaultStorage()) {
  *   an unknown mode is coerced to 'free'. Strings are trimmed.
  * @param {object} [storage] - defaults to window.localStorage
  * @returns {boolean} true if persisted; false if storage was unavailable /
- *   rejected the write (private mode / quota) — caller should warn rather than
+ *   rejected the write (private mode / quota), caller should warn rather than
  *   assume success.
  */
 export const saveEndpoint = function (settings, storage = defaultStorage()) {

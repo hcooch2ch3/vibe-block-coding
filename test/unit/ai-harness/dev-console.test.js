@@ -1,4 +1,4 @@
-// The generate/edit helpers behind window.vibe — the reusable core the live
+// The generate/edit helpers behind window.vibe, the reusable core the live
 // smoke test and (week 2) the UI both call. Driven against a real headless
 // scratch-vm; only fetch is mocked.
 import {generate, edit, measureBuildRate, measureEditQuality, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
@@ -111,7 +111,7 @@ const editsEnvelope = (answer, edits) => Promise.resolve({
     ok: true, json: () => Promise.resolve({content: [{text: JSON.stringify({answer, edits})}]})
 });
 
-describe('propose/applyProposal — id+fingerprint edits', () => {
+describe('propose/applyProposal, id+fingerprint edits', () => {
     const s = body => ({hat: 'when_flag', body});
     const fp = scriptFingerprint;
     const seed = (vm, target, scripts) => vm.shareBlocksToTarget(compile(scripts), target.id);
@@ -163,7 +163,7 @@ describe('propose/applyProposal — id+fingerprint edits', () => {
         expect(after).toMatch(/"say"/);         // say kept
     });
 
-    test('WRONG id (find mismatch) is dropped — no destructive edit (C2)', async () => {
+    test('WRONG id (find mismatch) is dropped, no destructive edit (C2)', async () => {
         const {vm, target} = makeHeadlessVM();
         const current = [s([['say', 'Hello']]), s([['forever', [['turn', 15]]]])];
         await seed(vm, target, current);
@@ -207,7 +207,7 @@ describe('propose/applyProposal — id+fingerprint edits', () => {
         out.changedTopIds.forEach(id => expect(target.blocks.getBlock(id)).toBeTruthy());
     });
 
-    test('fails closed on a stale workspace — no injection', async () => {
+    test('fails closed on a stale workspace, no injection', async () => {
         const {vm, target} = makeHeadlessVM();
         await seed(vm, target, [s([['move', 10]])]);
         const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'say hi', targetId: target.id},

@@ -4,7 +4,7 @@
  * generate/edit are thin wrappers that run "speech → blocks" and "speech → edit"
  * over the vm in one shot. They just wire llm.requestScripts → dsl.compile/decompile
  * → edit.applyEdit; the logic lives in each module. The live smoke test (console)
- * and the week-2 UI use the same functions.
+ * and the week-2 UI both call these same functions.
  *
  * installDevConsole exposes these functions as window.vibe in dev builds.
  */
@@ -89,18 +89,18 @@ const OP_FOR_ACTION = {add: 'add', modify: 'replace', remove: 'remove'};
 
 /**
  * Dev-only eval: run labeled edit cases through requestTurn, then score each case
- * against the ACTUAL production resolver, editsToOps — NOT a lookalike proxy. A
+ * against the ACTUAL production resolver, editsToOps, not a lookalike proxy. A
  * case is compliant iff the model's reply resolves to exactly ONE op, of the
  * expected type, targeting the expected script. Because scoring runs the real
  * editsToOps (id-based selection + exact-find gate), it inherits production's
  * behavior by construction: a wrong-id/right-find edit is dropped (scores 0), a
  * substring find is dropped (scores 0), and a correct edit bundled with spurious
- * or full-program-resend edits yields >1 op (scores 0) — the lenient failure modes
- * a `.some()` scorer would wave through.
+ * or full-program-resend edits yields >1 op (scores 0). Those are the lenient
+ * failure modes a `.some()` scorer would wave through.
  *
  * This is the load-bearing check on the "model follows the protocol" assumption
- * (an under-compliant model silently drops the child's edits). Needs a real key —
- * run it MANUALLY before shipping edit UI with a ~12-case labeled corpus; target
+ * (an under-compliant model silently drops the child's edits). It needs a real key.
+ * Run it MANUALLY before shipping edit UI with a ~12-case labeled corpus; target
  * rate ≥ 0.8 (the project's validation-gate precedent). Nothing in CI runs it.
  *
  * @param {VirtualMachine} vm - unused; kept for window.vibe signature parity
@@ -131,7 +131,7 @@ export const measureEditQuality = async function (vm, {apiKey, cases, model}, fe
 };
 
 /**
- * Compile the current target's program and ask the LLM to respond — but do NOT
+ * Compile the current target's program and ask the LLM to respond, but do NOT
  * mutate the workspace. Returns {answer} on a text-only reply, or
  * {answer, proposal} when the model returns applicable edits. The proposal
  * carries a baseStamp so applyProposal can detect stale edits before injecting.
@@ -186,18 +186,18 @@ export const propose = async function (vm, opts, fetchImpl) {
  * @param {object} proposal - {kind:'edit', baseStamp, ops}
  * @returns {Promise<object>} {ok:false, stale:true} when stale; otherwise
  *   {ok:true, changedTopIds} where changedTopIds are the vm hat ids this apply
- *   added or replaced (empty for a keep-only edit) — for the canvas glow.
+ *   added or replaced (empty for a keep-only edit). Used for the canvas glow.
  */
 export const applyProposal = async function (vm, proposal) {
     const {targetId, baseHash} = proposal.baseStamp;
     // Fail-closed for a proposal persisted before this upgrade (has no ops).
     if (!Array.isArray(proposal.ops)) return {ok: false, stale: true};
     if (!targetMatchesBase(vm, targetId, baseHash)) return {ok: false, stale: true};
-    // misc(a): stop threads ONLY here, at Apply — propose must not touch the running
+    // misc(a): stop threads ONLY here, at Apply. propose must not touch the running
     // project. applyOps' deleteBlock can orphan a running script otherwise.
     vm.stopAll();
     // Recover the REAL post-injection hat ids. shareBlocksToTarget runs newBlockIds
-    // on a deep clone, so compile-time ids are discarded — the only ids that reach
+    // on a deep clone, so compile-time ids are discarded; the only ids that reach
     // the workspace are the vm's. Snapshot before, diff after: added + replaced hats
     // are present after but not before; kept hats keep their id; removed hats vanish.
     const target = vm.runtime.getTargetById(targetId);

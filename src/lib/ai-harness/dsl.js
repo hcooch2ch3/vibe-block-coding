@@ -3,7 +3,7 @@
  *
  * The LLM works with a short, friendly mini DSL (e.g. ['move', 10]), while
  * scratch-vm works with verbose runtime block objects. This module translates
- * between the two, both directions.
+ * between the two, in both directions.
  *
  *   compile:   DSL script → block array (passed to vm.shareBlocksToTarget)
  *   decompile: Blocks instance → DSL script (to show the current program to the LLM)
@@ -14,7 +14,7 @@
 
 // DSL name → {opcode, hat?, inputs:[{name, shadow, field}]}
 // inputs is the shadow block spec to create for each value input.
-// shadow decides not only vm execution but also the input widget shown in the
+// shadow drives vm execution and also picks the input widget shown in the
 // editor (e.g. math_positive_number = a slot that rejects negatives), so it must
 // match the scratch-blocks widget the child sees, not the runtime accepted value.
 // (Round-trip tests do not catch this widget difference.)

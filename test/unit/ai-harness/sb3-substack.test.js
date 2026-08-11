@@ -6,7 +6,7 @@ const flag = body => ({hat: 'when_flag', body});
 
 // Seed a program, serialize the whole project, deserialize into a runtime, and
 // return the reloaded non-stage sprite. Read it from deserialize's RETURNED
-// targets (they already carry their blocks) — NOT from runtime.targets, which
+// targets (they already carry their blocks), NOT from runtime.targets, which
 // still holds makeHeadlessVM's pre-seeded blank sprite. installTargets is
 // skipped: it only adds/sorts/renames targets, it does not mutate block data.
 const reload = async prog => {
@@ -40,7 +40,7 @@ describe('sb3 serialize/deserialize preserves programs', () => {
     test('reloaded SUBSTACK inputs keep shadow === null (not undefined)', async () => {
         // The original corruption worry: newBlockIds turns shadow:null -> undefined,
         // which sb3 would serialize as an obscured shadow. Assert the round-trip
-        // recovers shadow === null exactly — decompile alone reads only .block and
+        // recovers shadow === null exactly, decompile alone reads only .block and
         // would not catch a corrupted shadow tag.
         const reloaded = await reload([
             flag([['repeat', 3, [['move', 10]]]]),

@@ -28,7 +28,7 @@ const messages = defineMessages({
 });
 
 // Stateless. Header (status label + the right buttons for `status`) then one
-// BlockPreview per changed script. `previews` is [{script, variant}] — the caller
+// BlockPreview per changed script. `previews` is [{script, variant}], the caller
 // already dropped unchanged scripts and tagged each with added/updated. Named
 // export for shallow tests; default is intl-wrapped.
 const ProposalCard = function ({status, previews, removeCount, explanation, onApply, onIgnore, onRebuild, vm, intl}) {

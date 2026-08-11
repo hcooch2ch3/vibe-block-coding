@@ -27,7 +27,7 @@ describe('scriptToXml', () => {
         expect(stmt).toContain('type="motion_movesteps"');
     });
 
-    test('forever is a cap block — no trailing <next> after it', () => {
+    test('forever is a cap block, no trailing <next> after it', () => {
         const xml = scriptToXml({hat: 'when_flag', body: [['forever', [['turn', 15]]]]});
         expect(xml).toContain('type="control_forever"');
         const after = xml.slice(xml.indexOf('type="control_forever"'));

@@ -47,7 +47,7 @@ export const loadPrefs = function (storage = defaultStorage()) {
             x: parsed.x,
             y: parsed.y,
             collapsed: Boolean(parsed.collapsed),
-            // size is optional — width defaults on load, height stays content-driven
+            // size is optional, width defaults on load, height stays content-driven
             // (null) until the child has resized. Only accept finite stored values.
             w: Number.isFinite(parsed.w) ? parsed.w : null,
             h: Number.isFinite(parsed.h) ? parsed.h : null,
@@ -91,7 +91,7 @@ export const savePrefs = function (prefs, storage = defaultStorage()) {
  * Keep the card on-screen for the current viewport. `bounds="parent"` only
  * constrains live dragging; a stored coord from a larger/older window can be
  * off-screen, so we clamp on load. `cardHeight` is the visible height to keep
- * fully on-screen — pass DEFAULT_CARD_H when expanded so the body isn't below
+ * fully on-screen, pass DEFAULT_CARD_H when expanded so the body isn't below
  * the fold, or HEADER_H when collapsed (header-only).
  * @param {object} pos - the candidate {x, y} position
  * @param {object} viewport - {innerWidth, innerHeight} of the window

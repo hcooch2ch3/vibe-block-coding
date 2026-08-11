@@ -7,7 +7,7 @@
 }
 
 /* The frame's visible height is set inline (draggable). This wrapper fills the
-   frame and scrolls when the full-height canvas is taller — a plain CSS
+   frame and scrolls when the full-height canvas is taller, a plain CSS
    scrollbar, no dependency on Blockly's read-only scrollbars. Absolute-fill
    (not height:100%) so the height resolves reliably inside the flex history
    list, where percentage heights don't. */

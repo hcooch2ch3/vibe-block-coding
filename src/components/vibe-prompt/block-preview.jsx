@@ -19,7 +19,7 @@ const CONTENT_PAD = 12; // breathing room under the last block
 const TOP_MARGIN = 24; // workspace-unit inset so the hat block's decorative top cap isn't clipped
 
 // Memoize the ScratchBlocks acquisition (and any failure) so a jsdom/SSR throw
-// never re-attempts and never escapes — container shallow tests stay safe.
+// never re-attempts and never escapes, container shallow tests stay safe.
 let cachedSB;
 let sbFailed = false;
 const getScratchBlocks = function (vm) {
@@ -108,7 +108,7 @@ class BlockPreview extends React.Component {
             );
             this.setState({contentH});
         } catch (e) {
-            // fail closed — and dispose a workspace that injected before the throw
+            // fail closed, and dispose a workspace that injected before the throw
             // so the defensive path can't leak DOM/listeners.
             if (this.ws) {
                 try {
