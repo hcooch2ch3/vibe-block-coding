@@ -75,7 +75,7 @@ The one place we touch Scratch itself is a two-line mount in `src/components/gui
 
 Built as a fork of [scratch-gui](https://github.com/scratchfoundation/scratch-gui) (Scratch 3.0) and React, with a language model behind the connection modes above.
 
-Scratch is a project of the Scratch Foundation. Because scratch-gui is licensed under the GNU AGPL v3, this fork is too. See [`LICENSE`](LICENSE).
+Scratch is a project of the Scratch Foundation. Because scratch-gui is licensed under the GNU AGPL v3, this fork is too. See [`LICENSE`](LICENSE) and the [license compliance notes](docs/LICENSE-COMPLIANCE.md) for the dependency breakdown.
 
 ## Contributing
 
