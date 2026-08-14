@@ -215,6 +215,68 @@ export const scriptHatIds = function (blocks) {
         .map(b => b.id);
 };
 
+// True iff every value input of `block` points to a shadow literal carrying the
+// expected field. A reporter plugged into a NUM/TEXT slot (inputs[name].block is a
+// non-shadow block, so it lacks fields[field]) makes the block unrepresentable.
+const inputsAreLiteral = function (blocks, block, spec) {
+    return spec.inputs.every(inp => {
+        const ref = block.inputs[inp.name];
+        if (!ref || !ref.block) return false;
+        const vb = blocks.getBlock(ref.block);
+        return Boolean(vb && vb.fields && vb.fields[inp.field]);
+    });
+};
+
+// Walk a next-chain (and substacks) checking every block is round-trippable. Mirrors
+// decompileSequence's access path exactly, so for VM-resident blocks "representable" ==
+// "decompile succeeds". (On un-sanitized/dangling state it is strictly more defensive:
+// it returns false where decompile would throw, never a dangerous false positive.)
+const seqRepresentable = function seqRep (blocks, firstId) {
+    let cur = firstId;
+    while (cur) {
+        const block = blocks.getBlock(cur);
+        if (!block) return false;
+        const entry = REV[block.opcode];
+        if (!entry) return false; // unknown opcode
+        if (!inputsAreLiteral(blocks, block, entry.spec)) return false;
+        if (entry.spec.substack) {
+            const sub = block.inputs[entry.spec.substack];
+            if (sub && sub.block && !seqRep(blocks, sub.block)) return false;
+        }
+        cur = block.next;
+    }
+    return true;
+};
+
+/**
+ * True iff the whole hat-script at hatId can be faithfully decompiled to DSL.
+ * A false result means the script must stay inert (invisible + never edited).
+ * @param {Blocks} blocks - vm target blocks
+ * @param {string} hatId - candidate top-level hat id
+ * @returns {boolean} true if the whole script round-trips through the DSL
+ */
+export const isRepresentable = function (blocks, hatId) {
+    const hat = blocks.getBlock(hatId);
+    if (!hat) return false;
+    const entry = REV[hat.opcode];
+    if (!entry || !entry.spec.hat) return false;
+    return seqRepresentable(blocks, hat.next);
+};
+
+/**
+ * Supported hat ids whose entire script is representable, in workspace order.
+ * Intended as the SHARED index space for the tolerant edit path: once decompile()
+ * and applyOps() both enumerate this list (see the tolerant-decompile task), the Nth
+ * entry here is the Nth script decompile emits, keeping id-based edits aligned.
+ * NOTE: decompile() still enumerates scriptHatIds() until that task lands, so it is not
+ * yet safe on non-representable scripts and this alignment is not yet in force.
+ * @param {Blocks} blocks - vm target blocks
+ * @returns {Array<string>} representable hat ids in workspace order
+ */
+export const editableHatIds = function (blocks) {
+    return scriptHatIds(blocks).filter(id => isRepresentable(blocks, id));
+};
+
 /**
  * Decompile every top-level hat script of a Blocks instance into DSL.
  * @param {Blocks} blocks - vm.editingTarget.blocks

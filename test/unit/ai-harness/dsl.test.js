@@ -1,4 +1,4 @@
-import {compile, decompile, scriptHatIds, normalizeScript} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds, editableHatIds, isRepresentable, normalizeScript} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM} from './headless-target';
 
 const flag = body => ({hat: 'when_flag', body});
@@ -111,5 +111,85 @@ describe('Tier B substacks (repeat/forever)', () => {
         const b = normalizeScript({hat: 'when_flag', body: [['say', '05']]});
         expect(a.body[0]).toEqual(['say', '5']); // not coerced to number 5
         expect(JSON.stringify(a)).not.toBe(JSON.stringify(b)); // a text edit is not a no-op
+    });
+});
+
+// Raw block arrays for content the DSL cannot represent. compile() can only emit
+// OPMAP opcodes, so these are hand-built and planted with the real vm. Declared once
+// at module scope; the Task 2 decompile-tolerance and drift-guard tests reuse them.
+// NOTE: shareBlocksToTarget runs newBlockIds, which rewrites every id on plant, so the
+// literal ids below are gone afterward -- re-derive ids from the vm (scriptHatIds).
+const rawIfScript = [
+    {id: 'h1', opcode: 'event_whenflagclicked', inputs: {}, fields: {},
+        next: 'if1', parent: null, topLevel: true, shadow: false, x: 80, y: 80},
+    {id: 'if1', opcode: 'control_if', inputs: {}, fields: {},
+        next: null, parent: 'h1', topLevel: false, shadow: false}
+];
+
+// when_flag -> repeat(3) { control_if }: the repeat is representable, but its SUBSTACK
+// holds an unknown block. Exercises the seqRepresentable recursion (the flat fixtures do not).
+const rawSubstackIf = [
+    {id: 'hs', opcode: 'event_whenflagclicked', inputs: {}, fields: {},
+        next: 'rep', parent: null, topLevel: true, shadow: false, x: 80, y: 80},
+    {id: 'rep', opcode: 'control_repeat',
+        inputs: {TIMES: {name: 'TIMES', block: 'sht', shadow: 'sht'},
+            SUBSTACK: {name: 'SUBSTACK', block: 'cif', shadow: null}},
+        fields: {}, next: null, parent: 'hs', topLevel: false, shadow: false},
+    {id: 'sht', opcode: 'math_whole_number', inputs: {},
+        fields: {NUM: {name: 'NUM', value: '3'}}, next: null, parent: 'rep', shadow: true},
+    {id: 'cif', opcode: 'control_if', inputs: {}, fields: {},
+        next: null, parent: 'rep', shadow: false}
+];
+
+// when_flag -> move, but STEPS holds a reporter (motion_xposition), not a shadow literal.
+const rawReporterInput = [
+    {id: 'h2', opcode: 'event_whenflagclicked', inputs: {}, fields: {},
+        next: 'mv2', parent: null, topLevel: true, shadow: false, x: 80, y: 80},
+    {id: 'mv2', opcode: 'motion_movesteps',
+        inputs: {STEPS: {name: 'STEPS', block: 'rep2', shadow: 'sh2'}}, fields: {},
+        next: null, parent: 'h2', topLevel: false, shadow: false},
+    {id: 'sh2', opcode: 'math_number', inputs: {},
+        fields: {NUM: {name: 'NUM', value: '10'}}, next: null, parent: 'mv2', shadow: true},
+    {id: 'rep2', opcode: 'motion_xposition', inputs: {}, fields: {},
+        next: null, parent: 'mv2', shadow: false}
+];
+
+describe('isRepresentable', () => {
+    test('a fully-supported script is representable', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(compile([flag([['move', 10], ['say', 'hi']])]), target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(true);
+    });
+    test('a script containing an unknown opcode is NOT representable', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawIfScript, target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(false);
+    });
+    test('a supported block with a reporter in a value input is NOT representable', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawReporterInput, target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(false);
+    });
+    test('an unknown block nested inside a substack is NOT representable (recursion)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawSubstackIf, target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(false);
+    });
+});
+
+describe('editableHatIds', () => {
+    test('keeps only representable scripts, in order', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(compile([flag([['move', 10]])]), target.id);
+        await vm.shareBlocksToTarget(rawIfScript, target.id);
+        // scriptHatIds sees BOTH when_flag hats; editableHatIds drops the if one.
+        expect(scriptHatIds(target.blocks).length).toBe(2);
+        const editable = editableHatIds(target.blocks);
+        expect(editable.length).toBe(1);
+        expect(isRepresentable(target.blocks, editable[0])).toBe(true);
     });
 });
