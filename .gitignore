@@ -34,3 +34,7 @@ npm-*
 # Superpowers brainstorm/visual-companion scratch artifacts (local only)
 .superpowers/
 .vercel
+
+# dual-review-loop runtime files
+.claude/dual-review-loop.*
+.claude/reviews/
