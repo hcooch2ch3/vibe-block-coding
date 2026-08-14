@@ -27,19 +27,28 @@ test('targetMatchesBase: false when the target is gone (fail-closed → Rebuild)
     expect(targetMatchesBase(vm, 'no-such-target', hashProgram([]))).toBe(false);
 });
 
-test('targetMatchesBase: false (not throw) when the live workspace has a non-OPMAP block (fail-closed)', () => {
+test('targetMatchesBase: an inert (non-OPMAP) script is invisible to stale detection', () => {
     const {vm, target} = makeHeadlessVM();
     // Known hat (event_whenthisspriteclicked = "when_clicked") with an UNKNOWN body block.
+    // decompile now SKIPS this whole script (non-representable) instead of throwing, so the
+    // editable program is [] -- an inert-only workspace hashes equal to an empty base. This is
+    // safe: apply only ever targets representable scripts by editable index, so an unchanged
+    // editable program (empty here) genuinely means "nothing to conflict with". (Documented
+    // as the "stale detection on inert-only changes" known limitation.)
     target.blocks.createBlock({
         id: 'hat1', opcode: 'event_whenthisspriteclicked',
         next: 'alien1', parent: null, inputs: {}, fields: {},
         topLevel: true, shadow: false, x: 0, y: 0
     });
     target.blocks.createBlock({
-        id: 'alien1', opcode: 'sound_play', // not in OPMAP → decompile throws
+        id: 'alien1', opcode: 'sound_play', // not in OPMAP → decompiled away, not thrown on
         next: null, parent: 'hat1', inputs: {}, fields: {},
         topLevel: false, shadow: false
     });
+    // No throw (the try/catch survives as defense-in-depth for truly corrupt state), and the
+    // editable program is [] → matches an empty base because the inert script is invisible.
     expect(() => targetMatchesBase(vm, target.id, hashProgram([]))).not.toThrow();
-    expect(targetMatchesBase(vm, target.id, hashProgram([]))).toBe(false);
+    expect(targetMatchesBase(vm, target.id, hashProgram([]))).toBe(true);
+    // NOT vacuously true: a non-empty base still fails to match the empty editable program.
+    expect(targetMatchesBase(vm, target.id, hashProgram(A))).toBe(false);
 });

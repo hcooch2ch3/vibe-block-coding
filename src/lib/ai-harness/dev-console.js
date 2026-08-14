@@ -10,7 +10,7 @@
  */
 
 import {requestScripts, requestTurn, DEFAULT_MODEL} from './llm';
-import {compile, decompile, scriptHatIds} from './dsl';
+import {compile, decompile, editableHatIds} from './dsl';
 import {applyEdit, applyOps, editsToOps} from './edit';
 import {hashProgram, targetMatchesBase} from './base-hash';
 
@@ -201,9 +201,9 @@ export const applyProposal = async function (vm, proposal) {
     // the workspace are the vm's. Snapshot before, diff after: added + replaced hats
     // are present after but not before; kept hats keep their id; removed hats vanish.
     const target = vm.runtime.getTargetById(targetId);
-    const before = new Set(scriptHatIds(target.blocks));
+    const before = new Set(editableHatIds(target.blocks));
     await applyOps(vm, proposal.ops, targetId);
-    const changedTopIds = scriptHatIds(target.blocks).filter(id => !before.has(id));
+    const changedTopIds = editableHatIds(target.blocks).filter(id => !before.has(id));
     return {ok: true, changedTopIds};
 };
 

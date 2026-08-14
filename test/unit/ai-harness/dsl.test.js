@@ -193,3 +193,50 @@ describe('editableHatIds', () => {
         expect(isRepresentable(target.blocks, editable[0])).toBe(true);
     });
 });
+
+describe('decompile tolerance', () => {
+    test('does not throw and returns only representable scripts', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(compile([flag([['move', 10]])]), target.id);
+        await vm.shareBlocksToTarget(rawIfScript, target.id); // unknown-body script
+        let out;
+        expect(() => { out = decompile(target.blocks); }).not.toThrow();
+        expect(out).toEqual([flag([['move', 10]])]); // if-script omitted
+    });
+    test('all-unknown workspace decompiles to []', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawIfScript, target.id);
+        expect(decompile(target.blocks)).toEqual([]);
+    });
+});
+
+// Drift guard: the entire safety story rests on the equivalence
+//   isRepresentable(hat) === "decompileScript(hat) will not throw".
+// seqRepresentable and decompileSequence are two hand-mirrored walks; every other test
+// exercises them SEPARATELY. This pins the equivalence so a future OPMAP/decompile change
+// can't un-mirror them silently (which would let a false-positive predicate crash decompile
+// with nothing green to catch it -- and is why base-hash's catch is NOT truly dead).
+describe('isRepresentable matches decompile-safe (drift guard)', () => {
+    test('every OPMAP-expressible script is representable AND decompiles cleanly', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [flag([
+            ['goto', 0, 0], ['set_x', -100], ['say_secs', 'hi', 2], ['wait', 1],
+            ['repeat', 3, [['move', 10], ['turn', 15]]],
+            ['forever', [['next_costume']]]
+        ])];
+        await vm.shareBlocksToTarget(compile(prog), target.id);
+        for (const id of scriptHatIds(target.blocks)) {
+            expect(isRepresentable(target.blocks, id)).toBe(true);
+        }
+        expect(() => decompile(target.blocks)).not.toThrow();
+        expect(decompile(target.blocks)).toEqual(prog); // round-trip holds
+    });
+    test('unknown-opcode and reporter-input scripts are rejected by the predicate', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawIfScript, target.id);
+        await vm.shareBlocksToTarget(rawReporterInput, target.id);
+        for (const id of scriptHatIds(target.blocks)) {
+            expect(isRepresentable(target.blocks, id)).toBe(false);
+        }
+    });
+});

@@ -31,7 +31,9 @@ export const targetMatchesBase = function (vm, targetId, baseHash) {
     try {
         return hashProgram(decompile(target.blocks)) === baseHash;
     } catch (e) {
-        // Unknown opcode / corrupt blocks → treat as edited → stale → Rebuild (fail-closed).
+        // Unknown opcodes no longer throw (editableHatIds filters non-representable scripts
+        // out of decompile). This is now defense-in-depth for genuinely corrupt block state
+        // (e.g. a dangling id in _scripts) → treat as edited → stale → Rebuild (fail-closed).
         return false;
     }
 };

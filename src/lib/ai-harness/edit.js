@@ -14,7 +14,7 @@
  * by array position (index): reorders and duplicate hats degrade to "all changed".
  */
 
-import {compileScript, scriptHatIds, normalizeScript} from './dsl';
+import {compileScript, editableHatIds, normalizeScript} from './dsl';
 
 // Compare whether two DSL scripts are semantically equal. Args are normalized into
 // the same space as decompile before comparing, so if the LLM returns a number as
@@ -121,7 +121,7 @@ const placeAt = function (compiled, x, y) {
  *
  * Note: if the project is running, stop it before calling (deleteBlock does not clean
  * up running threads, a scratch-vm @todo). op.index (replace/remove) is 0-based on the
- * live scriptHatIds order: the caller (applyProposal's stale guard) guarantees live
+ * live editableHatIds order: the caller (applyProposal's stale guard) guarantees live
  * order == base snapshot order. add uses index:null.
  *
  * @param {VirtualMachine} vm - the vm to apply edits to
@@ -138,7 +138,7 @@ export const applyOps = async function (vm, ops, targetId) {
     const blocks = target.blocks;
     // Snapshot of hat ids indexed to match op.index: even if deletion shifts the order, we point by id.
     // The caller (applyProposal's stale guard) guarantees live order == base snapshot order.
-    const hatIds = scriptHatIds(blocks);
+    const hatIds = editableHatIds(blocks);
 
     // Compile the new scripts to plant first (read old coordinates before deletion to preserve them).
     const toShare = [];

@@ -1,5 +1,5 @@
 import {diff, applyEdit, applyOps, editsToOps, scriptFingerprint} from '../../../src/lib/ai-harness/edit';
-import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds, editableHatIds} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM, reachableIds} from './headless-target';
 
 // A DSL script is {hat, body:[[op, ...args], ...]}.
@@ -305,4 +305,70 @@ describe('applyOps (editsToOps-shaped ops against a headless VM)', () => {
         goneIds.forEach(id => expect(target.blocks.getBlock(id)).toBeUndefined());
         expect(decompile(target.blocks)).toEqual([s([['say', 'keep']])]);
     });
+});
+
+describe('applyOps preserves inert (non-representable) scripts', () => {
+    // A when_flag+control_if script the DSL cannot represent. CRITICAL: shareBlocksToTarget
+    // runs newBlockIds, which REWRITES every id on plant -- the literal ids passed here are
+    // GONE afterward (reachableIds(blocks, 'k1') === []). Never reference a planted literal
+    // id; always re-derive the inert hat id from the vm via inertHatId().
+    const rawIf = (hatId, ifId, x, y) => [
+        {id: hatId, opcode: 'event_whenflagclicked', inputs: {}, fields: {},
+            next: ifId, parent: null, topLevel: true, shadow: false, x, y},
+        {id: ifId, opcode: 'control_if', inputs: {}, fields: {},
+            next: null, parent: hatId, topLevel: false, shadow: false}
+    ];
+    // The one supported hat whose body is NOT representable = the quarantined script.
+    const inertHatId = blocks => {
+        const editable = new Set(editableHatIds(blocks));
+        return scriptHatIds(blocks).find(id => !editable.has(id));
+    };
+
+    test('inert-LAST: replacing the editable script leaves the unknown script untouched',
+        async () => {
+            const {vm, target} = makeHeadlessVM();
+            // Order: [representable move-script, inert if-script].
+            await vm.shareBlocksToTarget(compile([flag([['move', 10]])]), target.id);
+            await vm.shareBlocksToTarget(rawIf('k1', 'kif', 200, 200), target.id);
+
+            const inertHat = inertHatId(target.blocks);         // vm id, not the literal
+            const inertBefore = reachableIds(target.blocks, inertHat);
+            expect(inertBefore.length).toBe(2);                 // hat + control_if both present
+
+            const current = decompile(target.blocks);           // -> [move-script] only
+            expect(current).toEqual([flag([['move', 10]])]);
+
+            await applyEdit(vm, current, [flag([['say', 'hi']])], target.id);
+
+            // Same inert hat id still resolves to the same 2 blocks: no data loss.
+            expect(reachableIds(target.blocks, inertHat)).toEqual(inertBefore);
+            expect(decompile(target.blocks)).toEqual([flag([['say', 'hi']])]);
+        });
+
+    test('inert-FIRST: editable index 0 (scriptHatIds index 1) resolves to the right script',
+        async () => {
+            const {vm, target} = makeHeadlessVM();
+            // Order: [inert if-script, representable move-script].
+            await vm.shareBlocksToTarget(rawIf('j1', 'jif', 40, 40), target.id);
+            await vm.shareBlocksToTarget(compile([flag([['move', 10]])]), target.id);
+
+            // The two index spaces MUST differ here for the test to be meaningful.
+            expect(scriptHatIds(target.blocks).length).toBe(2);   // [inert, move]
+            expect(editableHatIds(target.blocks).length).toBe(1); // [move] only
+
+            const inertHat = inertHatId(target.blocks);           // == scriptHatIds()[0]
+            const inertBefore = reachableIds(target.blocks, inertHat);
+            expect(inertBefore.length).toBe(2);                   // hat + control_if
+
+            const current = decompile(target.blocks);             // -> [move-script] at index 0
+            expect(current).toEqual([flag([['move', 10]])]);
+
+            // Edit #1 (editable index 0). A leaked scriptHatIds would resolve index 0 to
+            // the INERT hat and corrupt/delete it. Correct code touches only the move.
+            await applyEdit(vm, current, [flag([['say', 'hi']])], target.id);
+
+            // Inert hat still holds its 2 blocks intact (no data loss) AND the move changed.
+            expect(reachableIds(target.blocks, inertHat)).toEqual(inertBefore);
+            expect(decompile(target.blocks)).toEqual([flag([['say', 'hi']])]);
+        });
 });

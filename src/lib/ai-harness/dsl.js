@@ -265,11 +265,10 @@ export const isRepresentable = function (blocks, hatId) {
 
 /**
  * Supported hat ids whose entire script is representable, in workspace order.
- * Intended as the SHARED index space for the tolerant edit path: once decompile()
- * and applyOps() both enumerate this list (see the tolerant-decompile task), the Nth
- * entry here is the Nth script decompile emits, keeping id-based edits aligned.
- * NOTE: decompile() still enumerates scriptHatIds() until that task lands, so it is not
- * yet safe on non-representable scripts and this alignment is not yet in force.
+ * The SHARED index space for the tolerant edit path: decompile() and applyOps() both
+ * enumerate this list, so the Nth entry here is the Nth script decompile() emits, keeping
+ * id-based edits aligned. Non-representable scripts are filtered out here, so decompile()
+ * skips them instead of throwing and applyOps() never indexes or deletes them.
  * @param {Blocks} blocks - vm target blocks
  * @returns {Array<string>} representable hat ids in workspace order
  */
@@ -283,5 +282,5 @@ export const editableHatIds = function (blocks) {
  * @returns {Array<object>} array of DSL scripts ({hat, body})
  */
 export const decompile = function (blocks) {
-    return scriptHatIds(blocks).map(id => decompileScript(blocks, id));
+    return editableHatIds(blocks).map(id => decompileScript(blocks, id));
 };
