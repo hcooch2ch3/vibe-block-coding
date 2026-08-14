@@ -2,10 +2,10 @@
 // smoke test and (week 2) the UI both call. Driven against a real headless
 // scratch-vm; only fetch is mocked.
 import {generate, edit, measureBuildRate, measureEditQuality, propose, applyProposal} from '../../../src/lib/ai-harness/dev-console';
-import {compile, decompile, scriptHatIds} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds, editableHatIds} from '../../../src/lib/ai-harness/dsl';
 import {hashProgram} from '../../../src/lib/ai-harness/base-hash';
 import {scriptFingerprint} from '../../../src/lib/ai-harness/edit';
-import {makeHeadlessVM} from './headless-target';
+import {makeHeadlessVM, reachableIds} from './headless-target';
 
 // fakeVm: a minimal vm stub for measureBuildRate (vm is unused-but-kept for
 // signature stability with the window.vibe.measure wrapper).
@@ -144,6 +144,43 @@ describe('propose/applyProposal, id+fingerprint edits', () => {
         const after = decompile(target.blocks);
         expect(after.length).toBe(3);
         expect(JSON.stringify(after)).toMatch(/"turn"/);   // spin survived
+    });
+
+    test('propose+apply on a workspace with an UNKNOWN block: no crash, block preserved', async () => {
+        const {vm, target} = makeHeadlessVM();
+        // Representable script, then a hand-built script the DSL cannot represent
+        // (when_flag -> control_if). This is the exact case that used to throw in propose().
+        await seed(vm, target, [s([['move', 10]])]);
+        await vm.shareBlocksToTarget([
+            {id: 'uhat', opcode: 'event_whenflagclicked', inputs: {}, fields: {},
+                next: 'uif', parent: null, topLevel: true, shadow: false, x: 220, y: 220},
+            {id: 'uif', opcode: 'control_if', inputs: {}, fields: {},
+                next: null, parent: 'uhat', topLevel: false, shadow: false}
+        ], target.id);
+
+        // The unknown script is invisible to the editable program; propose sees only [move].
+        const current = decompile(target.blocks);
+        expect(current).toEqual([s([['move', 10]])]);
+
+        // The inert hat + its if-block, captured by vm id (newBlockIds rewrote the literals).
+        const editable = new Set(editableHatIds(target.blocks));
+        const inertHat = scriptHatIds(target.blocks).find(id => !editable.has(id));
+        const inertBefore = reachableIds(target.blocks, inertHat);
+        expect(inertBefore.length).toBe(2);
+
+        // Real production entry point: propose must NOT throw on the unknown block, and must
+        // resolve a modify of the representable script #1.
+        const {proposal} = await propose(vm, {apiKey: 'k', instruction: 'say hi instead', targetId: target.id},
+            () => editsEnvelope('ok', [
+                {action: 'modify', id: 1, find: fp(current[0]), script: s([['say', 'hi']])}
+            ]));
+        expect(proposal.kind).toBe('edit');
+
+        const res = await applyProposal(vm, proposal);
+        expect(res.ok).toBe(true);
+        // Unknown script untouched (no data loss) AND the representable script changed.
+        expect(reachableIds(target.blocks, inertHat)).toEqual(inertBefore);
+        expect(decompile(target.blocks)).toEqual([s([['say', 'hi']])]);
     });
 
     test('REPLACEMENT: remove #id (find copied) deletes only that script', async () => {
