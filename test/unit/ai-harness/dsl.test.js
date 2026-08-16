@@ -61,6 +61,42 @@ describe('keypress hat compile (field-on-block)', () => {
     });
 });
 
+describe('keypress hat round-trip', () => {
+    test('keypress with space round-trips', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [{hat: ['when_key', 'space'], body: [['move', 10]]}];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('keypress with any round-trips', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [{hat: ['when_key', 'any'], body: [['say', 'hi']]}];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('keypress with a repeat substack round-trips', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [{hat: ['when_key', 'up arrow'], body: [['repeat', 3, [['move', 10]]]]}];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+    test('a fieldless hat decompiles to a STRING, not an array (identity guard)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [{hat: 'when_flag', body: [['move', 10]]}]);
+        const out = decompile(target.blocks);
+        expect(typeof out[0].hat).toBe('string');
+        expect(out[0].hat).toBe('when_flag');
+    });
+    // Digit keys are enum strings '0'..'9'; decompile reads the field raw (no coerce),
+    // so this pins that a future coerce on hat fields can't turn '0' into number 0.
+    test('a digit key round-trips as a string (no coerce)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        const prog = [{hat: ['when_key', '0'], body: [['move', 10]]}];
+        await seed(vm, prog);
+        expect(decompile(target.blocks)).toEqual(prog);
+    });
+});
+
 describe('Tier A flat opcode additions', () => {
     test('multi-input and no-input flat blocks round-trip', async () => {
         const {vm, target} = makeHeadlessVM();
@@ -239,7 +275,7 @@ describe('isRepresentable matches decompile-safe (drift guard)', () => {
             ['goto', 0, 0], ['set_x', -100], ['say_secs', 'hi', 2], ['wait', 1],
             ['repeat', 3, [['move', 10], ['turn', 15]]],
             ['forever', [['next_costume']]]
-        ])];
+        ]), {hat: ['when_key', 'space'], body: [['move', 10]]}];
         await vm.shareBlocksToTarget(compile(prog), target.id);
         for (const id of scriptHatIds(target.blocks)) {
             expect(isRepresentable(target.blocks, id)).toBe(true);

@@ -227,9 +227,14 @@ const decompileSequence = function decompileSeq (blocks, firstId) {
 };
 
 // Convert one stack starting at hat id back into a {hat, body} DSL script.
+// A hat with a `fields` spec decompiles to [name, ...fieldValues]; a fieldless hat
+// stays a bare string (keeps when_flag/when_clicked and saved history unchanged).
 const decompileScript = function (blocks, hatId) {
     const hat = blocks.getBlock(hatId);
-    return {hat: REV[hat.opcode].name, body: decompileSequence(blocks, hat.next)};
+    const entry = REV[hat.opcode];
+    const fieldVals = (entry.spec.fields || []).map(f => hat.fields[f.name].value);
+    const hatOut = fieldVals.length ? [entry.name, ...fieldVals] : entry.name;
+    return {hat: hatOut, body: decompileSequence(blocks, hat.next)};
 };
 
 /**
