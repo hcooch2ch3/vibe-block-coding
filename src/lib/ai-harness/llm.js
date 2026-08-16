@@ -106,12 +106,16 @@ const fetchWithTimeout = async function (doFetch, url, options, timeoutMs) {
  * @returns {string} system prompt
  */
 export const buildSystemPrompt = function () {
-    const lines = Object.entries(OPMAP).map(([name, spec]) => {
-        const args = spec.inputs.map(inp => inp.name).join(', ');
-        const kind = spec.hat ? ' (hat: starts a script)' : '';
-        const head = args ? `${name}(${args})` : name;
-        return spec.substack ? `- ${head} { ...steps }${kind}` : `- ${head}${kind}`;
-    });
+    // Field hats (a dropdown on the block body, e.g. when_key) can't be rendered by the
+    // generic value-input loop; skip any spec with `fields` and advertise them explicitly below.
+    const lines = Object.entries(OPMAP)
+        .filter(([, spec]) => !spec.fields)
+        .map(([name, spec]) => {
+            const args = spec.inputs.map(inp => inp.name).join(', ');
+            const kind = spec.hat ? ' (hat: starts a script)' : '';
+            const head = args ? `${name}(${args})` : name;
+            return spec.substack ? `- ${head} { ...steps }${kind}` : `- ${head}${kind}`;
+        });
     return [
         'You turn a child\'s request into Scratch blocks, written as a tiny JSON DSL.',
         'Supported steps:',
@@ -121,6 +125,10 @@ export const buildSystemPrompt = function () {
         '  ["repeat", 10, [["move", 10], ["turn", 15]]]',
         '  ["forever", [["move", 10]]]',
         'A "forever" must be the LAST step in its list. Nothing can follow it.',
+        '',
+        'To start a script when a key is pressed, use an ARRAY hat with the key:',
+        '  {"hat": ["when_key", "space"], "body": [["move", 10]]}',
+        'Allowed keys: space, up arrow, down arrow, left arrow, right arrow, any.',
         '',
         'Reply with ONLY a JSON array of scripts. Each script is',
         '{"hat": "<hat step>", "body": [["step", ...args], ...]}.',

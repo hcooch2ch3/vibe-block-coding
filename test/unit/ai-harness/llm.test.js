@@ -34,6 +34,16 @@ describe('buildSystemPrompt', () => {
     });
 });
 
+describe('buildSystemPrompt keypress guidance', () => {
+    test('advertises the array hat form and common keys, not a bare when_key line', () => {
+        const p = buildSystemPrompt();
+        expect(p).toContain('["when_key", "space"]');
+        expect(p).toMatch(/up arrow/);
+        // the generic vocabulary loop must NOT emit a parameterless "- when_key" line
+        expect(p).not.toMatch(/^- when_key\b/m);
+    });
+});
+
 describe('buildUserPrompt', () => {
     test('a generate request carries just the instruction', () => {
         const p = buildUserPrompt({instruction: 'make the cat walk'});
@@ -330,6 +340,10 @@ describe('buildEnvelopeSystemPrompt (edits contract)', () => {
         expect(p.toLowerCase()).toMatch(/copy/);        // copy the find token, don't derive it
         expect(p.toLowerCase()).toMatch(/instead of/);  // replacement steering
         expect(p.toLowerCase()).toMatch(/unchanged|do not mention|kept|is kept/);
+        // Keypress guidance must survive the envelope's line filter (the array-hat example
+        // is space-indented so it does NOT match the dropped '{"hat"' prefix). Pins the
+        // load-bearing coupling: envelope mode is the live chat path.
+        expect(p).toContain('["when_key", "space"]');
     });
     // The free-demo proxy (api/chat.js) rejects any request whose system prompt
     // lacks the marker 'Scratch blocks'. If this phrase is ever reworded here,
