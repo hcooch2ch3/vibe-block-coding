@@ -12,7 +12,16 @@
  * entry to the OPMAP table is all it takes to extend the supported opcodes.
  */
 
-// DSL name → {opcode, hat?, inputs:[{name, shadow, field}]}
+// event_whenkeypressed KEY_OPTION enum — the 42 internal values copied verbatim from
+// scratch-blocks blocks_vertical/event.js:280-321 (second element of each options pair).
+const KEY_OPTIONS = [
+    'space', 'up arrow', 'down arrow', 'right arrow', 'left arrow', 'any',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+];
+
+// DSL name → {opcode, hat?, inputs:[{name, shadow, field}], fields?:[{name, values}]}
 // inputs is the shadow block spec to create for each value input.
 // shadow drives vm execution and also picks the input widget shown in the
 // editor (e.g. math_positive_number = a slot that rejects negatives), so it must
@@ -21,6 +30,12 @@
 export const OPMAP = {
     when_flag: {opcode: 'event_whenflagclicked', hat: true, inputs: []},
     when_clicked: {opcode: 'event_whenthisspriteclicked', hat: true, inputs: []},
+    when_key: {
+        opcode: 'event_whenkeypressed',
+        hat: true,
+        inputs: [],
+        fields: [{name: 'KEY_OPTION', values: KEY_OPTIONS}]
+    },
     move: {opcode: 'motion_movesteps', inputs: [{name: 'STEPS', shadow: 'math_number', field: 'NUM'}]},
     turn: {opcode: 'motion_turnright', inputs: [{name: 'DEGREES', shadow: 'math_number', field: 'NUM'}]},
     goto: {opcode: 'motion_gotoxy',
@@ -63,6 +78,15 @@ export const OPMAP = {
 // opcode → {name, spec} reverse mapping (for decompile)
 const REV = {};
 for (const [name, spec] of Object.entries(OPMAP)) REV[spec.opcode] = {name, spec};
+
+/**
+ * The opcode-name of a hat, whether it is a bare string ('when_flag') or a
+ * parameterized array (['when_key','space']). Every consumer that looks a hat up
+ * in OPMAP MUST route through this — never index OPMAP[script.hat] directly.
+ * @param {string|Array} h - a DSL hat
+ * @returns {string} the hat's DSL name
+ */
+export const hatName = h => (Array.isArray(h) ? h[0] : h);
 
 let counter = 0;
 const uid = () => `dsl_${Date.now().toString(36)}_${(counter++).toString(36)}`;
@@ -112,6 +136,11 @@ export const compileScript = function (script) {
                 });
                 block.inputs[inp.name] = {name: inp.name, block: sid, shadow: sid};
             });
+            // Dropdown fields set directly on the block body (no shadow). Field values
+            // come AFTER the value-input args: [op, ...inputValues, ...fieldValues].
+            (spec.fields || []).forEach((f, i) => {
+                block.fields[f.name] = {name: f.name, value: String(rest[spec.inputs.length + i])};
+            });
             if (spec.substack) {
                 // omit the SUBSTACK input entirely when the body is empty
                 const subFirst = emitSeq(rest[spec.inputs.length] || [], id, false);
@@ -128,7 +157,9 @@ export const compileScript = function (script) {
         return first;
     };
     // hat + body as one sequence: the first step (hat) is topLevel, the rest chain via next.
-    emitSequence([[script.hat], ...script.body], null, true);
+    // A hat may be a bare name string or a [name, ...fieldValues] array (e.g. keypress).
+    const hatStep = Array.isArray(script.hat) ? script.hat : [script.hat];
+    emitSequence([hatStep, ...script.body], null, true);
     return out;
 };
 

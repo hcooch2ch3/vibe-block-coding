@@ -1,4 +1,4 @@
-import {compile, decompile, scriptHatIds, editableHatIds, isRepresentable, normalizeScript} from '../../../src/lib/ai-harness/dsl';
+import {compile, decompile, scriptHatIds, editableHatIds, isRepresentable, normalizeScript, hatName} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM} from './headless-target';
 
 const flag = body => ({hat: 'when_flag', body});
@@ -42,6 +42,22 @@ describe('scriptHatIds', () => {
             expect(target.blocks.getBlock(id).opcode).toBe('event_whenflagclicked');
             expect(decompile(target.blocks)[i]).toEqual(scripts[i]);
         });
+    });
+});
+
+describe('keypress hat compile (field-on-block)', () => {
+    test('compile sets KEY_OPTION field on the hat block', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await seed(vm, [{hat: ['when_key', 'space'], body: [['move', 10]]}]);
+        const hatId = scriptHatIds(target.blocks)[0];
+        const hat = target.blocks.getBlock(hatId);
+        expect(hat.opcode).toBe('event_whenkeypressed');
+        expect(hat.fields.KEY_OPTION).toEqual({name: 'KEY_OPTION', value: 'space'});
+        expect(hat.topLevel).toBe(true);
+    });
+    test('hatName extracts the opcode name from a string or array hat', () => {
+        expect(hatName('when_flag')).toBe('when_flag');
+        expect(hatName(['when_key', 'space'])).toBe('when_key');
     });
 });
 
