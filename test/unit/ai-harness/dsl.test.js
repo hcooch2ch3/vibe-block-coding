@@ -1,5 +1,24 @@
+import fs from 'fs';
+import path from 'path';
 import {compile, decompile, scriptHatIds, editableHatIds, isRepresentable, normalizeScript, hatName} from '../../../src/lib/ai-harness/dsl';
 import {makeHeadlessVM} from './headless-target';
+
+describe('hat string-assumption guard', () => {
+    // Naive-regression pin (ai-harness-scoped): a consumer must route hat lookups through
+    // hatName(), never index OPMAP with a raw script.hat. Comment SPANS are stripped first
+    // (block comments incl. multi-line JSDoc, then line comments) so the hatName JSDoc that
+    // quotes the anti-pattern as prose is not a false positive, and a trailing/inline comment
+    // can't shield a real code violation on the same line.
+    test('no ai-harness consumer indexes OPMAP with a raw script.hat', () => {
+        const dir = path.join(__dirname, '../../../src/lib/ai-harness');
+        for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.js'))) {
+            const code = fs.readFileSync(path.join(dir, f), 'utf8')
+                .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments (incl. multi-line JSDoc)
+                .replace(/\/\/.*$/gm, '');           // line comments
+            expect(code).not.toMatch(/OPMAP\[\s*script\.hat\s*\]/);
+        }
+    });
+});
 
 const flag = body => ({hat: 'when_flag', body});
 

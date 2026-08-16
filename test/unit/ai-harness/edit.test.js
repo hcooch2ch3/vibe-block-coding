@@ -372,3 +372,61 @@ describe('applyOps preserves inert (non-representable) scripts', () => {
             expect(decompile(target.blocks)).toEqual([flag([['say', 'hi']])]);
         });
 });
+
+describe('keypress hat editing', () => {
+    const kp = key => ({hat: ['when_key', key], body: [['move', 10]]});
+    const flagScript = {hat: 'when_flag', body: [['say', 'hi']]};
+    test('an unchanged keypress script is a keep (no-op)', () => {
+        expect(diff([kp('space')], [kp('space')])).toEqual([{type: 'keep', index: 0}]);
+    });
+    test('changing only the key produces a replace', () => {
+        const ops = diff([kp('space')], [kp('up arrow')]);
+        expect(ops[0].type).toBe('replace');
+        expect(ops[0].script).toEqual(kp('up arrow'));
+    });
+    // The exact collision the array hat exists to defend (spec A): two keypress
+    // scripts differing ONLY by key must stay distinct identities in diff.
+    test('two keypress scripts differing only by key do not collide', () => {
+        const ops = diff([kp('space'), kp('up arrow')], [kp('space'), kp('up arrow')]);
+        expect(ops).toEqual([{type: 'keep', index: 0}, {type: 'keep', index: 1}]);
+        // swapping them is a change at both positions, not a false keep
+        const swapped = diff([kp('space'), kp('up arrow')], [kp('up arrow'), kp('space')]);
+        expect(swapped.map(o => o.type)).toEqual(['replace', 'replace']);
+    });
+    // Mixed hat types (string + array) adjacent: editing only the string one leaves the keypress a keep.
+    test('keypress beside a fieldless hat: editing the fieldless one keeps the keypress', () => {
+        const ops = diff([kp('space'), flagScript],
+            [kp('space'), {hat: 'when_flag', body: [['say', 'bye']]}]);
+        expect(ops[0]).toEqual({type: 'keep', index: 0});
+        expect(ops[1].type).toBe('replace');
+    });
+});
+
+// The id+fingerprint production edit path (editsToOps -> applyOps against a real VM) was
+// only ever exercised with string hats; pin it for array hats too so a keypress edit-loop
+// regression can't ship green. Uses asSet: applyOps re-plants replaced scripts at the tail,
+// so decompile order shifts (edit.js MVP note) — compare order-insensitively.
+describe('keypress id+fingerprint edit loop (production path)', () => {
+    const kp = (key, body) => ({hat: ['when_key', key], body});
+    test('modify one keypress via editsToOps->applyOps; sibling keypress survives', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(
+            compile([kp('space', [['move', 10]]), kp('up arrow', [['say', 'hi']])]), target.id);
+        const current = decompile(target.blocks);
+        const ops = editsToOps(
+            [{action: 'modify', id: 1, find: scriptFingerprint(current[0]), script: kp('space', [['move', 99]])}],
+            current);
+        expect(ops).toEqual([{type: 'replace', index: 0, script: kp('space', [['move', 99]])}]);
+        await applyOps(vm, ops, target.id);
+        expect(asSet(decompile(target.blocks)))
+            .toEqual(asSet([kp('space', [['move', 99]]), kp('up arrow', [['say', 'hi']])]));
+    });
+    test('a wrong find token on a keypress is dropped fail-closed (array-hat fingerprint discriminates)', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(
+            compile([kp('space', [['move', 10]]), kp('up arrow', [['move', 10]])]), target.id);
+        const current = decompile(target.blocks);
+        // id 1 targets current[0], but the find token is current[1]'s (keys differ → fingerprints differ) → drop
+        expect(editsToOps([{action: 'remove', id: 1, find: scriptFingerprint(current[1])}], current)).toEqual([]);
+    });
+});
