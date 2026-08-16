@@ -291,11 +291,24 @@ const seqRepresentable = function seqRep (blocks, firstId) {
  * @param {string} hatId - candidate top-level hat id
  * @returns {boolean} true if the whole script round-trips through the DSL
  */
+// True iff every dropdown field a hat spec declares is present on the block and its
+// value is in the allowed enum. Guards decompileScript's unchecked hat.fields read.
+// Kept separate from inputsAreLiteral, which validates body-block value inputs only.
+const hatFieldsValid = function (block, spec) {
+    return (spec.fields || []).every(f => {
+        const fv = block.fields && block.fields[f.name];
+        // (f.values || []) fails closed: a fields entry without an enum quarantines
+        // rather than throwing on .includes.
+        return Boolean(fv) && (f.values || []).includes(fv.value);
+    });
+};
+
 export const isRepresentable = function (blocks, hatId) {
     const hat = blocks.getBlock(hatId);
     if (!hat) return false;
     const entry = REV[hat.opcode];
     if (!entry || !entry.spec.hat) return false;
+    if (!hatFieldsValid(hat, entry.spec)) return false;
     return seqRepresentable(blocks, hat.next);
 };
 

@@ -206,6 +206,48 @@ const rawReporterInput = [
         next: null, parent: 'mv2', shadow: false}
 ];
 
+// keypress hat with an out-of-enum key, over a representable body (move).
+const rawKeypressBadKey = [
+    {id: 'kh1', opcode: 'event_whenkeypressed', inputs: {},
+        fields: {KEY_OPTION: {name: 'KEY_OPTION', value: 'BOGUS'}},
+        next: 'kmv1', parent: null, topLevel: true, shadow: false, x: 80, y: 80},
+    {id: 'kmv1', opcode: 'motion_movesteps',
+        inputs: {STEPS: {name: 'STEPS', block: 'ksh1', shadow: 'ksh1'}}, fields: {},
+        next: null, parent: 'kh1', topLevel: false, shadow: false},
+    {id: 'ksh1', opcode: 'math_number', inputs: {},
+        fields: {NUM: {name: 'NUM', value: '10'}}, next: null, parent: 'kmv1', shadow: true}
+];
+// keypress hat with the KEY_OPTION field entirely missing.
+const rawKeypressNoField = [
+    {id: 'kh2', opcode: 'event_whenkeypressed', inputs: {}, fields: {},
+        next: null, parent: null, topLevel: true, shadow: false, x: 80, y: 80}
+];
+
+describe('keypress hat representability guard', () => {
+    test('an out-of-enum key is NOT representable', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawKeypressBadKey, target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(false);
+    });
+    test('a missing KEY_OPTION field is NOT representable', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(rawKeypressNoField, target.id);
+        const hatId = scriptHatIds(target.blocks)[0];
+        expect(isRepresentable(target.blocks, hatId)).toBe(false);
+    });
+    test('a good keypress survives beside a quarantined one; decompile skips the bad, deletes nothing', async () => {
+        const {vm, target} = makeHeadlessVM();
+        await vm.shareBlocksToTarget(compile([{hat: ['when_key', 'space'], body: [['move', 10]]}]), target.id);
+        await vm.shareBlocksToTarget(rawKeypressBadKey, target.id);
+        expect(scriptHatIds(target.blocks).length).toBe(2);
+        expect(editableHatIds(target.blocks).length).toBe(1);
+        let out;
+        expect(() => { out = decompile(target.blocks); }).not.toThrow();
+        expect(out).toEqual([{hat: ['when_key', 'space'], body: [['move', 10]]}]);
+    });
+});
+
 describe('isRepresentable', () => {
     test('a fully-supported script is representable', async () => {
         const {vm, target} = makeHeadlessVM();
@@ -262,8 +304,11 @@ describe('decompile tolerance', () => {
     });
 });
 
-// Drift guard: the entire safety story rests on the equivalence
-//   isRepresentable(hat) === "decompileScript(hat) will not throw".
+// Drift guard: the entire safety story rests on the relationship
+//   isRepresentable(hat) IMPLIES "decompileScript(hat) will not throw".
+// It is strictly STRONGER than that: for a hat dropdown field, isRepresentable also
+// rejects an out-of-enum value (e.g. ['when_key','BOGUS']) that decompileScript would
+// happily emit as garbage DSL. Do not "simplify" the enum check away as redundant.
 // seqRepresentable and decompileSequence are two hand-mirrored walks; every other test
 // exercises them SEPARATELY. This pins the equivalence so a future OPMAP/decompile change
 // can't un-mirror them silently (which would let a false-positive predicate crash decompile
