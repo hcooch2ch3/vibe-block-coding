@@ -16,7 +16,7 @@
  * Haiku 4.5 since this is a cost-sensitive children's tool.
  */
 
-import {OPMAP} from './dsl';
+import {OPMAP, hatName} from './dsl';
 import {scriptFingerprint} from './edit';
 
 export const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -241,10 +241,25 @@ export const validateScripts = function (scripts) {
         }
     };
     scripts.forEach(script => {
-        const hatSpec = script && OPMAP[script.hat];
+        const hn = script && hatName(script.hat);
+        const hatSpec = hn && OPMAP[hn];
         if (!hatSpec || !hatSpec.hat) {
-            throw new Error(`unsupported hat: ${script && script.hat}`);
+            throw new Error(`unsupported hat: ${script && JSON.stringify(script.hat)}`);
         }
+        // Hat dropdown fields: an array hat carries [name, ...fieldValues]. A fieldless
+        // hat is normally a bare string (the array form ['when_flag'] with no field args is
+        // tolerated and canonicalizes to the string on round-trip); a field hat must supply
+        // exactly its fields, all in-enum.
+        const hatFields = hatSpec.fields || [];
+        const hatArgs = Array.isArray(script.hat) ? script.hat.slice(1) : [];
+        if (hatArgs.length !== hatFields.length) {
+            throw new Error(`hat ${hn}: expected ${hatFields.length} field arg(s), got ${hatArgs.length}`);
+        }
+        hatFields.forEach((f, i) => {
+            if (!(f.values || []).includes(hatArgs[i])) {
+                throw new Error(`hat ${hn}: invalid ${f.name}: ${hatArgs[i]}`);
+            }
+        });
         const body = script.body || [];
         if (!Array.isArray(body)) throw new Error('body must be an array');
         body.forEach((step, i) => validateStep(step, i === body.length - 1));

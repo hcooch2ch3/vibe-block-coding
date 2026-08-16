@@ -168,6 +168,27 @@ describe('parseDSL substack validation', () => {
     });
 });
 
+describe('keypress hat validation', () => {
+    test('accepts a valid keypress hat', () => {
+        const out = parseDSL('[{"hat": ["when_key", "space"], "body": [["move", 10]]}]');
+        expect(out[0].hat).toEqual(['when_key', 'space']);
+    });
+    test('rejects an out-of-enum key', () => {
+        expect(() => parseDSL('[{"hat": ["when_key", "BOGUS"], "body": []}]')).toThrow();
+    });
+    test('rejects when_key given as a bare string (key missing)', () => {
+        expect(() => parseDSL('[{"hat": "when_key", "body": []}]')).toThrow();
+    });
+    test('rejects a fieldless hat given as an array', () => {
+        expect(() => parseDSL('[{"hat": ["when_flag", "space"], "body": []}]')).toThrow();
+    });
+    // Locks the fail-closed contract: a NUMERIC key (enum holds strings '0'..'9') is dropped,
+    // not silently coerced. Compile would String() it, but validate runs first and rejects.
+    test('rejects a numeric key (enum is string-typed)', () => {
+        expect(() => parseDSL('[{"hat": ["when_key", 0], "body": []}]')).toThrow();
+    });
+});
+
 describe('buildTurnUserPrompt', () => {
     test('numbers current scripts with 1-based ids and prints a find token', () => {
         const p = buildTurnUserPrompt({instruction: 'walk', currentScripts: [flag([['say', 'Hi']]), flag([['turn', 15]])]});
