@@ -5,7 +5,7 @@
  * then body steps chained via <next>, with loop bodies as <statement> substacks.
  */
 
-import {OPMAP} from './dsl';
+import {OPMAP, hatName} from './dsl';
 
 const esc = value => String(value)
     .replace(/&/g, '&amp;')
@@ -43,11 +43,21 @@ const chainSteps = function (steps) {
  */
 export const scriptToXml = function (script) {
     const bodyXml = chainSteps(script.body || []);
-    const hatSpec = OPMAP[script.hat];
+    const hatSpec = OPMAP[hatName(script.hat)];
     let top;
     if (hatSpec) {
+        // Dropdown fields on the hat body: fieldValues follow the name, [name, ...fieldValues].
+        const hatArgs = Array.isArray(script.hat) ? script.hat.slice(1) : [];
+        let hatInner = '';
+        (hatSpec.fields || []).forEach((f, i) => {
+            // Skip a missing arg rather than emitting <field>undefined</field>. Live scripts
+            // are arity-checked by validateScripts; this fails soft for any hand-built short hat.
+            if (typeof hatArgs[i] !== 'undefined' && hatArgs[i] !== null) {
+                hatInner += `<field name="${f.name}">${esc(hatArgs[i])}</field>`;
+            }
+        });
         const nextXml = bodyXml ? `<next>${bodyXml}</next>` : '';
-        top = `<block type="${hatSpec.opcode}">${nextXml}</block>`;
+        top = `<block type="${hatSpec.opcode}">${hatInner}${nextXml}</block>`;
     } else {
         top = bodyXml; // no hat (defensive), render the body alone
     }

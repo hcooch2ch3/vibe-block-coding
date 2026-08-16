@@ -107,7 +107,10 @@ ProposalCard.propTypes = {
     onIgnore: PropTypes.func,
     onRebuild: PropTypes.func,
     previews: PropTypes.arrayOf(PropTypes.shape({
-        script: PropTypes.shape({hat: PropTypes.string, body: PropTypes.array}),
+        script: PropTypes.shape({
+            hat: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
+            body: PropTypes.array
+        }),
         variant: PropTypes.oneOf(['added', 'updated'])
     })).isRequired,
     removeCount: PropTypes.number,

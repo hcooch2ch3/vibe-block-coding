@@ -53,3 +53,16 @@ describe('scriptToXml', () => {
         expect(xml).toContain('type="motion_movesteps"');
     });
 });
+
+describe('keypress hat XML', () => {
+    test('emits the KEY_OPTION field on the hat block', () => {
+        const xml = scriptToXml({hat: ['when_key', 'space'], body: [['move', 10]]});
+        expect(xml).toContain('type="event_whenkeypressed"');
+        expect(xml).toContain('<field name="KEY_OPTION">space</field>');
+    });
+    test('a fieldless hat still renders (no field element)', () => {
+        const xml = scriptToXml({hat: 'when_flag', body: [['move', 10]]});
+        expect(xml).toContain('type="event_whenflagclicked"');
+        expect(xml).not.toContain('KEY_OPTION');
+    });
+});

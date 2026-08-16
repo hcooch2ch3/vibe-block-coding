@@ -193,7 +193,10 @@ class BlockPreview extends React.Component {
 }
 
 BlockPreview.propTypes = {
-    script: PropTypes.shape({hat: PropTypes.string, body: PropTypes.array}).isRequired,
+    script: PropTypes.shape({
+        hat: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
+        body: PropTypes.array
+    }).isRequired,
     variant: PropTypes.oneOf(['added', 'removed', 'updated']).isRequired,
     vm: PropTypes.object
 };
