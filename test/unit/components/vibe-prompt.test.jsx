@@ -16,6 +16,21 @@ const baseProps = {
     onToggleExamples: jest.fn(), examplesOpen: false
 };
 
+test('the settings view offers a source-code link to the AGPL repository', () => {
+    // AGPL-3.0 section 13: network users must be offered the Corresponding Source.
+    // The settings screen is reached by every first-time user and re-openable via the
+    // gear, so the offer lives here.
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} />
+    );
+    const link = wrapper.find('a.vibe-source-link').hostNodes();
+    expect(link).toHaveLength(1);
+    expect(link.prop('href')).toBe('https://github.com/hcooch2ch3/vibe-block-coding');
+    expect(link.prop('target')).toBe('_blank');
+    // new-tab links must not leak window.opener to the destination
+    expect(link.prop('rel')).toContain('noopener');
+});
+
 test('the memory slider is not shown in the instruction view (hasKey)', () => {
     const wrapper = mountWithIntl(
         <VibePromptComponent {...baseProps} hasKey />

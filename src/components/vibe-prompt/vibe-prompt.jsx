@@ -25,7 +25,16 @@ const memoryMessages = defineMessages({
 // inline arrow in JSX which react/jsx-no-bind forbids).
 const noop = () => {};
 
+// Public source repository. Surfaced in the settings panel to satisfy AGPL-3.0
+// section 13 (offer the Corresponding Source to remote/network users).
+const REPO_URL = 'https://github.com/hcooch2ch3/vibe-block-coding';
+
 const messages = defineMessages({
+    sourceLink: {
+        id: 'vibe.prompt.sourceLink',
+        defaultMessage: 'Source code (AGPL-3.0)',
+        description: 'Link to the open-source repository, shown in the settings panel'
+    },
     keyPlaceholder: {
         id: 'vibe.prompt.keyPlaceholder',
         defaultMessage: 'Paste your API key (sk-ant-...)',
@@ -662,6 +671,14 @@ const VibePromptComponent = props => {
                     {intl.formatMessage(memoryMessages.memoryHint)}
                 </div>
             </div>
+            <a
+                className={classNames(styles.sourceLink, 'vibe-source-link', 'vibe-no-drag')}
+                href={REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                {intl.formatMessage(messages.sourceLink)}
+            </a>
         </div>
     );
 

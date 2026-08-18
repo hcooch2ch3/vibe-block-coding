@@ -169,6 +169,23 @@
     color: #7d8397;
 }
 
+/* AGPL-3.0 source offer, pinned at the bottom of the settings panel. */
+.source-link {
+    display: block;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e6e8ef;
+    font-size: 0.7rem;
+    color: #7d8397;
+    text-align: center;
+    text-decoration: none;
+}
+
+.source-link:hover {
+    color: #4c5163;
+    text-decoration: underline;
+}
+
 .status {
     margin-top: 0.375rem;
     font-size: 0.8rem;
