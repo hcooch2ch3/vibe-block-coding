@@ -79,4 +79,4 @@ Scratch is a project of the Scratch Foundation. Because scratch-gui is licensed 
 
 ## Contributing
 
-Issues and pull requests are welcome. Run it locally with the steps above, and keep new AI code under `src/lib/ai-harness/` so it stays separable from Scratch. A full contributor guide is on the way.
+Issues and pull requests are welcome. Run it locally with the steps above, and keep new AI code under `src/lib/ai-harness/` so it stays separable from Scratch. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and pull-request guidelines.
