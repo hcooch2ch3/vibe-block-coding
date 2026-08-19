@@ -1,0 +1,44 @@
+Vibe Block Coding
+Copyright (C) 2026 YimSeongMin (hcooch2ch3)
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See the LICENSE file for the full text.
+
+================================================================================
+Upstream attribution
+================================================================================
+
+Vibe Block Coding is a derivative work of scratch-gui
+(https://github.com/scratchfoundation/scratch-gui), created by the Scratch
+Foundation and its contributors and licensed under the GNU AGPL v3.0. Scratch is
+a project of the Scratch Foundation (https://scratch.mit.edu). All upstream
+copyright and license notices in the original source files are preserved.
+
+The Scratch runtime and editor packages this project depends on (scratch-vm,
+scratch-render, scratch-audio, scratch-paint, scratch-storage,
+scratch-svg-renderer, scratch-l10n, scratch-parser, scratch-sb1-converter) carry
+the same AGPL-3.0 license. scratch-blocks is licensed under Apache-2.0.
+
+The Scratch trademarks (the Scratch name, logo, the Scratch Cat, Gobo, Pico,
+Nano, Tera, and Giga graphics) are the property of the Massachusetts Institute of
+Technology (MIT) and may not be used to endorse or promote this project. See the
+TRADEMARK file.
+
+================================================================================
+Changes in this fork
+================================================================================
+
+The new work in this fork is concentrated in a small, separable set of files:
+
+  - src/lib/ai-harness/          natural-language <-> block two-way editing
+                                 (DSL compile/decompile, edit diff/apply, LLM calls)
+  - src/components/vibe-prompt/  the prompt panel UI
+  - api/chat.js                  the optional free-mode proxy (serverless function)
+  - a small mount in src/components/gui/gui.jsx and a dev hook in
+    src/reducers/vm.js
+
+The rest of the tree is stock scratch-gui. All additions are released under
+AGPL-3.0-only, the same license as the base. A per-dependency license breakdown
+is in docs/LICENSE-COMPLIANCE.md.
