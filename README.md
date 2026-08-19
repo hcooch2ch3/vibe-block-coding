@@ -2,7 +2,7 @@
 
 Kids build with words and refine with blocks. An AI plus block-coding tool for two-way editing, built on Scratch.
 
-**▶ [Try it live](https://vibe-app-drab.vercel.app/).** No signup, no API key. Type a sentence, watch blocks appear, run it.
+**▶ [Try it live](https://hcooch2ch3.github.io/vibe-block-coding/).** No signup, no API key. Type a sentence, watch blocks appear, run it.
 
 ![Demo: send a prompt, apply the AI's blocks, press the green flag, the cat spins](docs/demo.gif)
 
