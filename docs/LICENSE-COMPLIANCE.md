@@ -36,7 +36,7 @@ copyright and license notices in the source files are preserved.
 | Same license for derivative work | Met. The whole project is AGPL-3.0-only. |
 | Preserve copyright and license notices | Met. Upstream notices and `LICENSE` are kept. |
 | State the changes made | Met. Our additions are isolated under `src/lib/ai-harness/` and described in the [README](../README.md); the rest of the tree is stock scratch-gui. |
-| Section 13: offer source to users who interact over a network | Addressed. The source link is in the README and the repository is public. Adding a visible "source" link in the deployed app is recommended as a further step. |
+| Section 13: offer source to users who interact over a network | Met. The deployed app shows a visible "Source code (AGPL-3.0)" link in its settings panel, reachable by every user and re-openable via the gear, in addition to the README link and the public repository. |
 
 The free-mode proxy (`api/chat.js`) holds no secrets; it reads its API key from an
 environment variable and only forwards requests. It is published so anyone can
