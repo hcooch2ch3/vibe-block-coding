@@ -55,6 +55,8 @@ const ko = {
     'vibe.prompt.saveServer': '서버 저장',
     'vibe.prompt.freeLimited': '지금은 무료 데모가 붐벼요. 계속하려면 내 키를 넣어 주세요.',
     'vibe.prompt.useOwnKey': '내 키 쓰기',
+    // --- AGPL source offer (settings screen footer) ---
+    'vibe.prompt.sourceLink': '소스 코드 (AGPL-3.0)',
     // --- history ---
     'vibe.prompt.historyClear': '기록 지우기',
     'vibe.prompt.historyNote': '이 브라우저에만 있어요. 프로젝트에는 저장되지 않아요.',
