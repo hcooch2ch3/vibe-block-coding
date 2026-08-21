@@ -454,6 +454,11 @@ class VibePrompt extends React.Component {
             });
     }
     handleClearHistory () {
+        // Refuse mid-request: the propose tail concats onto prev.turns, so a clear
+        // that lands first leaves the reply card alone in a log the child just
+        // emptied, with no user bubble above it. The trash button is disabled on
+        // busy; this is the backstop.
+        if (this.state.busy) return;
         saveChat([]);
         this.setState({turns: [], examplesOpen: false});
     }

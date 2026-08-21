@@ -58,7 +58,7 @@ class HistoryList extends React.Component {
         );
     }
     render () {
-        const {intl, turns, onClearHistory} = this.props;
+        const {intl, turns, busy, onClearHistory} = this.props;
         if (!turns.length) return null;
         return (
             <div className={styles.history}>
@@ -70,6 +70,7 @@ class HistoryList extends React.Component {
                         aria-label={intl.formatMessage(messages.historyClear)}
                         className={classNames(styles.clearBtn, 'vibe-no-drag')}
                         type="button"
+                        disabled={busy}
                         title={intl.formatMessage(messages.historyClear)}
                         onClick={onClearHistory}
                     >
@@ -102,6 +103,7 @@ HistoryList.propTypes = {
 };
 
 HistoryList.defaultProps = {
+    busy: false,
     onApply: noop,
     onClearHistory: noop,
     onIgnore: noop,

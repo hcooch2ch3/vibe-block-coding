@@ -96,3 +96,15 @@ test('proposal turn renders a ProposalCard fed from the ops adapter', () => {
     card.prop('onApply')();
     expect(onApply).toHaveBeenCalledWith(turn);
 });
+
+test('Make it is disabled while a request is in flight', () => {
+    // handleMakeIt routes into runProposeFor, which refuses on busy. Leaving the
+    // button live makes a refusal read as a broken button, the same thing the
+    // Apply/Rebuild gate exists to avoid.
+    const turn = {id: 1, role: 'ai', kind: 'answer', text: 'sure', instruction: 'walk'};
+    const idle = shallowWithIntl(<HistoryRow turn={turn} onMakeIt={jest.fn()} />);
+    expect(idle.find('.vibe-makeit').prop('disabled')).toBeFalsy();
+
+    const busy = shallowWithIntl(<HistoryRow turn={turn} busy onMakeIt={jest.fn()} />);
+    expect(busy.find('.vibe-makeit').prop('disabled')).toBe(true);
+});

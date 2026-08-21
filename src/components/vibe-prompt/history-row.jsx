@@ -59,6 +59,7 @@ class HistoryRow extends React.Component {
                     <button
                         className={classNames('vibe-makeit', styles.makeIt)}
                         type="button"
+                        disabled={busy}
                         onClick={this.handleMakeIt}
                     >
                         {intl.formatMessage(messages.makeIt)}
@@ -101,7 +102,8 @@ HistoryRow.propTypes = {
 };
 
 const noop = function () {};
-HistoryRow.defaultProps = {onApply: noop, onIgnore: noop, onRebuild: noop, onMakeIt: noop};
+HistoryRow.defaultProps = {
+    busy: false, onApply: noop, onIgnore: noop, onRebuild: noop, onMakeIt: noop};
 
 export {HistoryRow};
 export default injectIntl(HistoryRow);

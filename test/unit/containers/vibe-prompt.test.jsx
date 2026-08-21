@@ -129,11 +129,76 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.turns[0].status).toBe('pending'); // untouched
         });
 
-        test('the proposal card is told when a request is in flight', () => {
+        test('busy reaches the Apply button through HistoryList and HistoryRow', () => {
+            // shallow() stops at VibePromptComponent, so a props() assertion here only
+            // re-checks a prop that predates the busy gate. Mount so the assertion lands
+            // on the button the child actually taps, pinning all three plumbing links.
+            const vm = makeVm({});
+            const turn = {id: 3, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            const store = configureStore()({scratchGui: {vm}});
+            const mount = busy => {
+                const w = mountWithIntl(
+                    <Provider store={store}><VibePromptConnected vm={vm} /></Provider>
+                );
+                w.find(VibePromptContainer).instance().setState({apiKey: 'sk-ant-test', turns: [turn], busy});
+                w.update();
+                return w.find('.proposal-card__apply').hostNodes();
+            };
+            expect(mount(true).prop('disabled')).toBe(true);
+            expect(mount(false).prop('disabled')).toBeFalsy();
+        });
+
+        test('Apply works again once the propose that blocked it resolves', async () => {
+            // The refusal test asserts busy is STILL true, so a leak that never cleared
+            // busy would pass it. This pins the other half: the gate lets go.
+            const vm = makeVm({});
+            jest.spyOn(devConsole, 'propose')
+                .mockImplementation(() => Promise.resolve({answer: 'ok', proposal: makeProposal()}));
+            const applySpy = jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true}));
+            const wrapper = render(vm);
+            const turn = {id: 3, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn]});
+            wrapper.instance().runProposeFor('x', 'sprite-a');
+            wrapper.instance().handleApply(turn);
+            expect(applySpy).not.toHaveBeenCalled();      // refused while in flight
+            await flushPromises();
+            expect(wrapper.instance().state.busy).toBe(false);
+            wrapper.instance().handleApply(turn);
+            await flushPromises();
+            expect(applySpy).toHaveBeenCalledTimes(1);    // allowed once the flag cleared
+        });
+
+        test('Clear history is refused mid-request so the reply cannot land in an empty log', () => {
+            // The propose tail concats onto prev.turns. Clearing while it is in flight
+            // left the AI card alone in a log the child had just emptied, with no user
+            // bubble above it.
             const vm = makeVm({});
             const wrapper = render(vm);
-            wrapper.setState({busy: true});
-            expect(wrapper.props().busy).toBe(true);
+            wrapper.setState({turns: [{id: 1, role: 'user', text: 'hi'}], busy: true});
+            wrapper.instance().handleClearHistory();
+            expect(wrapper.instance().state.turns).toHaveLength(1); // refused
+
+            wrapper.setState({busy: false});
+            wrapper.instance().handleClearHistory();
+            expect(wrapper.instance().state.turns).toHaveLength(0); // allowed when idle
+        });
+
+        test('a refused Apply does not let a second propose go out', async () => {
+            // The title claim of the fix: one request, not two.
+            const vm = makeVm({});
+            const proposeSpy = jest.spyOn(devConsole, 'propose')
+                .mockImplementation(() => Promise.resolve({answer: 'ok', proposal: makeProposal()}));
+            jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true}));
+            const wrapper = render(vm);
+            const turn = {id: 3, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn]});
+            wrapper.instance().runProposeFor('first', 'sprite-a');
+            wrapper.instance().handleApply(turn);          // used to clear busy here
+            wrapper.instance().submitInstruction('second'); // and let this one through
+            await flushPromises();
+            expect(proposeSpy).toHaveBeenCalledTimes(1);
         });
 
         test('glow is fail-open: a successful Apply stays "applied" even when the workspace is unavailable', async () => {

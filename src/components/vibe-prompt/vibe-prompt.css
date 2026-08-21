@@ -405,6 +405,11 @@
     color: #7d8397;
 }
 
+.clearBtn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .clearBtn {
     border: none;
     background: transparent;
@@ -485,7 +490,12 @@
     cursor: pointer;
 }
 
-.makeIt:hover {
+.makeIt:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.makeIt:hover:not(:disabled) {
     background: #3d7de8;
 }
 
