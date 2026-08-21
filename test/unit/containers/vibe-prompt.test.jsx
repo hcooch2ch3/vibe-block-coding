@@ -10,6 +10,7 @@ import * as devConsole from '../../../src/lib/ai-harness/dev-console';
 import * as glowModule from '../../../src/lib/ai-harness/glow';
 import * as uiPrefs from '../../../src/lib/ai-harness/ui-prefs';
 import * as chatStore from '../../../src/lib/ai-harness/chat-store';
+import * as endpointStore from '../../../src/lib/ai-harness/endpoint-store';
 
 // The dev-console propose/applyProposal are covered by their own unit tests; here
 // they are spied so these tests isolate the container's turn-model orchestration.
@@ -461,6 +462,94 @@ describe('VibePrompt container', () => {
             wrapper.instance().handleEditKey();
             expect(wrapper.instance().state.editingKey).toBe(true);
             expect(wrapper.instance().state.apiKey).toBe('sk-ant-test'); // key preserved
+        });
+
+        describe('connection-mode tabs are drafts', () => {
+            // The tabs used to write straight to state.mode, the same field isReady()
+            // reads. Picking an un-configured tab therefore made isReady() false, which
+            // hid the Back button (canCancelKey) and stranded the user on the settings
+            // screen. The tab is now a draft, like keyDraft / serverUrlDraft.
+            test('picking an un-configured tab keeps Back reachable and the live mode intact', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({apiKey: '', mode: 'free', modeDraft: 'free', editingKey: true});
+                wrapper.instance().handleModeChange('key');
+                wrapper.update();
+                expect(wrapper.instance().state.mode).toBe('free');     // live mode untouched
+                expect(wrapper.instance().state.modeDraft).toBe('key'); // only the tab moved
+                expect(wrapper.props().canCancelKey).toBe(true);        // Back still rendered
+            });
+
+            test('a draft tab does not clear the free-limit nudge waiting in the chat view', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({mode: 'free', modeDraft: 'free', freeLimited: true, editingKey: true});
+                wrapper.instance().handleModeChange('server');
+                expect(wrapper.instance().state.freeLimited).toBe(true); // limit still applies
+            });
+
+            test('backing out of an un-configured tab lands on the chat view, not settings', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({mode: 'free', modeDraft: 'server', editingKey: true});
+                wrapper.instance().handleBackFromKey();
+                wrapper.update();
+                expect(wrapper.instance().state.modeDraft).toBe('free'); // draft discarded
+                expect(wrapper.props().hasKey).toBe(true);               // chat, not settings
+            });
+
+            test('opening settings seeds the tab from the live mode', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({mode: 'server', serverUrl: 'https://x.test', modeDraft: 'free'});
+                wrapper.instance().handleEditKey();
+                expect(wrapper.instance().state.modeDraft).toBe('server');
+            });
+
+            test('the free-limit nudge opens the key tab without stranding the user', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({apiKey: '', mode: 'free', modeDraft: 'free', freeLimited: true});
+                wrapper.instance().handleUseOwnKey();
+                wrapper.update();
+                expect(wrapper.instance().state.editingKey).toBe(true);
+                expect(wrapper.instance().state.modeDraft).toBe('key');
+                expect(wrapper.instance().state.mode).toBe('free');  // live connection intact
+                expect(wrapper.props().canCancelKey).toBe(true);     // Back still rendered
+            });
+
+            test('saving a key commits the draft tab', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({keyDraft: 'sk-ant-x', mode: 'free', modeDraft: 'key', editingKey: true});
+                wrapper.instance().handleSubmitKey(noopEvent);
+                expect(wrapper.instance().state.mode).toBe('key');
+                expect(wrapper.instance().state.modeDraft).toBe('key');
+            });
+
+            test('starting the free demo commits the draft tab', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({mode: 'key', modeDraft: 'free', editingKey: true});
+                wrapper.instance().handleStartFree();
+                expect(wrapper.instance().state.mode).toBe('free');
+                expect(wrapper.instance().state.modeDraft).toBe('free');
+                expect(wrapper.instance().state.editingKey).toBe(false);
+            });
+
+            test('saving a custom server commits the draft tab', () => {
+                const vm = makeVm({});
+                // jsdom has no localStorage, so the real saveEndpoint reports a failed
+                // write and handleSubmitServer takes its (correct) error path.
+                jest.spyOn(endpointStore, 'saveEndpoint').mockReturnValue(true);
+                const wrapper = render(vm);
+                wrapper.setState({
+                    serverUrlDraft: 'https://gw.test', mode: 'free', modeDraft: 'server', editingKey: true
+                });
+                wrapper.instance().handleSubmitServer(noopEvent);
+                expect(wrapper.instance().state.mode).toBe('server');
+                expect(wrapper.instance().state.modeDraft).toBe('server');
+            });
         });
 
         test('back-from-key cancels editing and keeps the key', () => {

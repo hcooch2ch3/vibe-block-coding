@@ -95,8 +95,13 @@ class VibePrompt extends React.Component {
         this.state = {
             apiKey: loadKey(),
             keyDraft: '',
-            // 'free' | 'key' | 'server', how requests reach a model.
+            // 'free' | 'key' | 'server', how requests reach a model. This is the
+            // COMMITTED mode: isReady() and resolveConn() read it, so only a submit
+            // handler may write it.
             mode: ep.mode,
+            // The connection tab selected on the settings screen. A draft, exactly
+            // like keyDraft / serverUrlDraft, promoted to `mode` on save.
+            modeDraft: ep.mode,
             serverUrl: ep.serverUrl,
             serverToken: ep.serverToken,
             serverUrlDraft: ep.serverUrl,
@@ -177,7 +182,15 @@ class VibePrompt extends React.Component {
         // Selecting key mode is a best-effort persist: if this write fails, the key
         // still works this session and the mode defaults to a working state on reload.
         saveEndpoint({mode: 'key', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
-        this.setState({apiKey: key, keyDraft: '', error: false, editingKey: false, mode: 'key', freeLimited: false});
+        this.setState({
+            apiKey: key,
+            keyDraft: '',
+            error: false,
+            editingKey: false,
+            mode: 'key',
+            modeDraft: 'key',
+            freeLimited: false
+        });
     }
     // --- Connection mode helpers -------------------------------------------
     isReady () {
@@ -197,14 +210,13 @@ class VibePrompt extends React.Component {
     }
     handleModeChange (mode) {
         if (this.state.busy) return;
-        // Only persist a mode that is actually usable, so a reload never strands
-        // the user on the settings screen with an un-configured mode. The submit
-        // handlers (start/key/server) persist explicitly once the mode is ready.
-        this.setState({mode, error: false, freeLimited: false}, () => {
-            if (this.isReady()) {
-                saveEndpoint({mode, serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
-            }
-        });
+        // Picking a tab only moves the DRAFT. Writing this.state.mode here would flip
+        // isReady() mid-edit, which hides the Back button and strands the user on the
+        // settings screen with an un-configured mode. The submit handlers
+        // (start/key/server) commit and persist once the mode is actually usable.
+        // freeLimited is deliberately left alone: it drives a nudge in the chat view,
+        // and a draft tab change does not make the free-demo limit go away.
+        this.setState({modeDraft: mode, error: false});
     }
     handleServerUrlDraftChange (e) {
         this.setState({serverUrlDraft: e.target.value, error: false});
@@ -223,6 +235,7 @@ class VibePrompt extends React.Component {
         }
         this.setState({
             mode: 'server',
+            modeDraft: 'server',
             serverUrl: url,
             serverToken: token,
             serverUrlDraft: url,
@@ -235,21 +248,24 @@ class VibePrompt extends React.Component {
     handleStartFree () {
         // Free mode needs no input, persist and drop straight into the chat.
         saveEndpoint({mode: 'free', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
-        this.setState({mode: 'free', editingKey: false, error: false, freeLimited: false});
+        this.setState({mode: 'free', modeDraft: 'free', editingKey: false, error: false, freeLimited: false});
     }
     handleUseOwnKey () {
-        // From the free-limit nudge: open settings pre-set to key mode.
-        this.setState({editingKey: true, mode: 'key', freeLimited: false, error: false});
+        // From the free-limit nudge: open settings with the key tab pre-selected.
+        // Draft only, so backing out returns to a working free connection (and to the
+        // nudge, which still applies until a key is actually saved).
+        this.setState({editingKey: true, modeDraft: 'key', error: false});
     }
     handleEditKey () {
         // Switch to the key-entry screen WITHOUT clearing the current key, so the
         // child can back out (handleBackFromKey) and keep their existing key.
         if (this.state.busy) return;
-        this.setState({editingKey: true, keyDraft: '', error: false});
+        this.setState({editingKey: true, keyDraft: '', modeDraft: this.state.mode, error: false});
     }
     handleBackFromKey () {
         // Cancel key editing and return to the instruction view (key preserved).
-        this.setState({editingKey: false, keyDraft: '', error: false});
+        // Rewind the tab to the committed mode so Back is never a visible no-op.
+        this.setState({editingKey: false, keyDraft: '', modeDraft: this.state.mode, error: false});
     }
     handleToggleCollapse () {
         this.setState(prevState => {
@@ -526,6 +542,7 @@ class VibePrompt extends React.Component {
                 freeLimited={this.state.freeLimited}
                 hasKey={this.isReady() && !this.state.editingKey}
                 mode={this.state.mode}
+                modeDraft={this.state.modeDraft}
                 instructionDraft={this.state.instructionDraft}
                 keyDraft={this.state.keyDraft}
                 serverUrlDraft={this.state.serverUrlDraft}

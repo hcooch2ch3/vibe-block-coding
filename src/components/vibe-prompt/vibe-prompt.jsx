@@ -516,7 +516,7 @@ const VibePromptComponent = props => {
         turns, vm, onClearHistory, onApply, onIgnore, onRebuild, onMakeIt,
         canCancelKey, onCancelKey, size, onResizeStart,
         contextTurns, onContextTurnsChange,
-        mode, serverUrlDraft, serverTokenDraft, freeLimited,
+        mode, modeDraft, serverUrlDraft, serverTokenDraft, freeLimited,
         onModeChange, onServerUrlDraftChange, onServerTokenDraftChange,
         onSubmitServer, onStartFree, onUseOwnKey
     } = props;
@@ -546,24 +546,24 @@ const VibePromptComponent = props => {
             <div style={TOGGLE_ROW_STYLE}>
                 <ModeButton
                     value="free"
-                    current={mode}
+                    current={modeDraft}
                     label={intl.formatMessage(messages.connFree)}
                     onClick={onModeChange}
                 />
                 <ModeButton
                     value="key"
-                    current={mode}
+                    current={modeDraft}
                     label={intl.formatMessage(messages.connKey)}
                     onClick={onModeChange}
                 />
                 <ModeButton
                     value="server"
-                    current={mode}
+                    current={modeDraft}
                     label={intl.formatMessage(messages.connServer)}
                     onClick={onModeChange}
                 />
             </div>
-            {mode === 'free' && (
+            {modeDraft === 'free' && (
                 <div>
                     <div className={styles.notice}>
                         {intl.formatMessage(messages.freeIntro)}
@@ -577,7 +577,7 @@ const VibePromptComponent = props => {
                     </button>
                 </div>
             )}
-            {mode === 'key' && (
+            {modeDraft === 'key' && (
                 <form
                     className={styles.row}
                     onSubmit={onSubmitKey}
@@ -602,12 +602,12 @@ const VibePromptComponent = props => {
                     </button>
                 </form>
             )}
-            {mode === 'key' && (
+            {modeDraft === 'key' && (
                 <div className={styles.notice}>
                     {intl.formatMessage(messages.keyNotice)}
                 </div>
             )}
-            {mode === 'server' && (
+            {modeDraft === 'server' && (
                 <form onSubmit={onSubmitServer}>
                     <input
                         aria-label={intl.formatMessage(messages.serverUrlPlaceholder)}
@@ -639,7 +639,7 @@ const VibePromptComponent = props => {
                     </button>
                 </form>
             )}
-            {mode === 'server' && (
+            {modeDraft === 'server' && (
                 <div className={styles.notice}>
                     {intl.formatMessage(messages.serverNotice)}
                 </div>
@@ -887,6 +887,7 @@ VibePromptComponent.defaultProps = {
     freeLimited: false,
     hasKey: false,
     mode: 'free',
+    modeDraft: 'free',
     onContextTurnsChange: noop,
     turns: [],
     instructionDraft: '',
@@ -910,6 +911,7 @@ VibePromptComponent.propTypes = {
     intl: intlShape.isRequired,
     keyDraft: PropTypes.string,
     mode: PropTypes.oneOf(['free', 'key', 'server']),
+    modeDraft: PropTypes.oneOf(['free', 'key', 'server']),
     onApply: PropTypes.func,
     onCancelKey: PropTypes.func,
     onChipClick: PropTypes.func.isRequired,
