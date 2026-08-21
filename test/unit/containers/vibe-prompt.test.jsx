@@ -488,6 +488,16 @@ describe('VibePrompt container', () => {
                 expect(wrapper.instance().state.freeLimited).toBe(true); // limit still applies
             });
 
+            test('picking a tab never persists: only a submit handler writes storage', () => {
+                const vm = makeVm({});
+                const spy = jest.spyOn(endpointStore, 'saveEndpoint');
+                const wrapper = render(vm);
+                wrapper.setState({mode: 'free', modeDraft: 'free', editingKey: true});
+                wrapper.instance().handleModeChange('key');
+                wrapper.instance().handleModeChange('server');
+                expect(spy).not.toHaveBeenCalled();
+            });
+
             test('backing out of an un-configured tab lands on the chat view, not settings', () => {
                 const vm = makeVm({});
                 const wrapper = render(vm);

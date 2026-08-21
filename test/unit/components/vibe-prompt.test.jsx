@@ -31,6 +31,61 @@ test('the settings view offers a source-code link to the AGPL repository', () =>
     expect(link.prop('rel')).toContain('noopener');
 });
 
+// The settings screen reads modeDraft (the tab the user is browsing), never the
+// committed mode. Nothing else in the suite renders this component with the two
+// diverging, so without these the whole component half of the draft split can be
+// reverted silently.
+const pressedTab = wrapper => wrapper.find('button[aria-pressed=true]').hostNodes();
+const buttonsSaying = (wrapper, text) => wrapper.findWhere(
+    n => n.type() === 'button' && n.text().trim() === text
+).hostNodes();
+const backButtons = wrapper => wrapper.findWhere(
+    n => n.type() === 'button' && n.text().trim().charAt(0) === '\u2039'
+).hostNodes();
+
+test('the settings tabs follow modeDraft, not the committed mode', () => {
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} mode="free" modeDraft="key" />
+    );
+    const on = pressedTab(wrapper);
+    expect(on).toHaveLength(1);
+    expect(on.text().trim()).toBe('My key');
+});
+
+test('the settings panel follows modeDraft, not the committed mode', () => {
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} mode="free" modeDraft="key" />
+    );
+    // key panel is up...
+    expect(wrapper.find('input[placeholder="Paste your API key (sk-ant-...)"]').hostNodes())
+        .toHaveLength(1);
+    // ...and neither of the other two panels leaked through on the committed mode
+    expect(buttonsSaying(wrapper, 'Start')).toHaveLength(0);
+    expect(wrapper.find('input[placeholder="Server URL (https://\u2026)"]').hostNodes())
+        .toHaveLength(0);
+});
+
+test('the server panel follows modeDraft too', () => {
+    const wrapper = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} mode="free" modeDraft="server" />
+    );
+    expect(wrapper.find('input[placeholder="Server URL (https://\u2026)"]').hostNodes())
+        .toHaveLength(1);
+    expect(buttonsSaying(wrapper, 'Start')).toHaveLength(0);
+});
+
+test('the Back button renders from canCancelKey', () => {
+    const shown = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} canCancelKey />
+    );
+    expect(backButtons(shown)).toHaveLength(1);
+
+    const hidden = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey={false} canCancelKey={false} />
+    );
+    expect(backButtons(hidden)).toHaveLength(0);
+});
+
 test('the memory slider is not shown in the instruction view (hasKey)', () => {
     const wrapper = mountWithIntl(
         <VibePromptComponent {...baseProps} hasKey />
