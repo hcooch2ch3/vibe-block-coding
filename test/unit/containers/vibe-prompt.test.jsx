@@ -488,6 +488,64 @@ describe('VibePrompt container', () => {
                 expect(wrapper.instance().state.freeLimited).toBe(true); // limit still applies
             });
 
+            // Opening or leaving the settings screen must reset EVERY draft, not just
+            // modeDraft. A half-reset leaves an abandoned edit looking authoritative.
+            test('Back rewinds the server drafts, not just the tab', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({
+                    mode: 'server',
+                    serverUrl: 'https://saved.test',
+                    serverToken: 'saved-token',
+                    modeDraft: 'free',
+                    serverUrlDraft: 'https://abandoned.test',
+                    serverTokenDraft: 'abandoned-token',
+                    editingKey: true
+                });
+                wrapper.instance().handleBackFromKey();
+                const st = wrapper.instance().state;
+                expect(st.serverUrlDraft).toBe('https://saved.test');
+                expect(st.serverTokenDraft).toBe('saved-token');
+                expect(st.modeDraft).toBe('server');
+            });
+
+            test('opening settings seeds the server drafts from the committed values', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({
+                    mode: 'server',
+                    serverUrl: 'https://saved.test',
+                    serverToken: 'saved-token',
+                    serverUrlDraft: 'https://stale.test',
+                    serverTokenDraft: 'stale-token'
+                });
+                wrapper.instance().handleEditKey();
+                const st = wrapper.instance().state;
+                expect(st.serverUrlDraft).toBe('https://saved.test');
+                expect(st.serverTokenDraft).toBe('saved-token');
+            });
+
+            test('the free-limit nudge resets drafts and respects busy, like the gear', () => {
+                const vm = makeVm({});
+                const wrapper = render(vm);
+                wrapper.setState({
+                    mode: 'free',
+                    keyDraft: 'sk-ant-abandoned',
+                    serverUrlDraft: 'https://stale.test',
+                    busy: true
+                });
+                wrapper.instance().handleUseOwnKey();
+                expect(wrapper.instance().state.editingKey).toBe(false); // blocked while busy
+
+                wrapper.setState({busy: false});
+                wrapper.instance().handleUseOwnKey();
+                const st = wrapper.instance().state;
+                expect(st.editingKey).toBe(true);
+                expect(st.modeDraft).toBe('key');
+                expect(st.keyDraft).toBe('');            // abandoned key not pre-filled
+                expect(st.serverUrlDraft).toBe('');      // seeded from committed serverUrl
+            });
+
             test('picking a tab never persists: only a submit handler writes storage', () => {
                 const vm = makeVm({});
                 const spy = jest.spyOn(endpointStore, 'saveEndpoint');

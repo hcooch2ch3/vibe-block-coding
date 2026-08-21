@@ -250,22 +250,42 @@ class VibePrompt extends React.Component {
         saveEndpoint({mode: 'free', serverUrl: this.state.serverUrl, serverToken: this.state.serverToken});
         this.setState({mode: 'free', modeDraft: 'free', editingKey: false, error: false, freeLimited: false});
     }
+    // Every draft the settings screen owns, rewound to what is actually committed.
+    // Crossing the settings boundary in EITHER direction resets all four together:
+    // a half-reset leaves an abandoned edit on screen looking like the saved value,
+    // which is the same trap the modeDraft split was introduced to close.
+    // `modeDraft` alone was rewound before, so an abandoned server URL survived Back
+    // and one confirming tap on Save server would overwrite a working connection.
+    freshDrafts (prevState) {
+        return {
+            keyDraft: '',
+            modeDraft: prevState.mode,
+            serverUrlDraft: prevState.serverUrl,
+            serverTokenDraft: prevState.serverToken,
+            error: false
+        };
+    }
     handleUseOwnKey () {
         // From the free-limit nudge: open settings with the key tab pre-selected.
         // Draft only, so backing out returns to a working free connection (and to the
-        // nudge, which still applies until a key is actually saved).
-        this.setState({editingKey: true, modeDraft: 'key', error: false});
+        // nudge, which still applies until a key is actually saved). Guarded on busy
+        // like handleEditKey: both open the same screen, so both refuse mid-request.
+        if (this.state.busy) return;
+        this.setState(prevState => ({
+            ...this.freshDrafts(prevState),
+            editingKey: true,
+            modeDraft: 'key'
+        }));
     }
     handleEditKey () {
         // Switch to the key-entry screen WITHOUT clearing the current key, so the
         // child can back out (handleBackFromKey) and keep their existing key.
         if (this.state.busy) return;
-        this.setState({editingKey: true, keyDraft: '', modeDraft: this.state.mode, error: false});
+        this.setState(prevState => ({...this.freshDrafts(prevState), editingKey: true}));
     }
     handleBackFromKey () {
         // Cancel key editing and return to the instruction view (key preserved).
-        // Rewind the tab to the committed mode so Back is never a visible no-op.
-        this.setState({editingKey: false, keyDraft: '', modeDraft: this.state.mode, error: false});
+        this.setState(prevState => ({...this.freshDrafts(prevState), editingKey: false}));
     }
     handleToggleCollapse () {
         this.setState(prevState => {
