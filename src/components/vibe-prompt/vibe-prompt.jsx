@@ -839,10 +839,10 @@ const VibePromptComponent = props => {
                                     {'💡'}
                                 </button>
                             )}
-                            {hasKey && (
+                            {hasKey && !collapsed && (
                                 <button
                                     aria-label={intl.formatMessage(messages.resetKey)}
-                                    className={classNames(styles.gear, 'vibe-no-drag')}
+                                    className={classNames(styles.gear, 'vibe-no-drag', 'vibe-gear-btn')}
                                     type="button"
                                     disabled={busy}
                                     title={intl.formatMessage(messages.resetKey)}

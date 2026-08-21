@@ -87,6 +87,18 @@ test('the examples button appears only with a key, expanded, and history', () =>
     expect(collapsed.find('.vibe-examples-btn').length).toBe(0);
 });
 
+test('the gear button appears only with a key AND expanded', () => {
+    // Collapsed hides the body, so a gear click would swap to a settings screen
+    // nobody can see. The header keeps only the status dot and the expand toggle.
+    const shown = mountWithIntl(<VibePromptComponent {...baseProps} hasKey />);
+    expect(shown.find('.vibe-gear-btn').hostNodes().length).toBe(1);
+
+    const collapsed = mountWithIntl(
+        <VibePromptComponent {...baseProps} hasKey collapsed />
+    );
+    expect(collapsed.find('.vibe-gear-btn').hostNodes().length).toBe(0);
+});
+
 test('clicking the examples button calls onToggleExamples', () => {
     const onToggleExamples = jest.fn();
     const turns = [{id: 0, role: 'user', text: 'hi'}];
