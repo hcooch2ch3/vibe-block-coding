@@ -482,6 +482,12 @@ class VibePrompt extends React.Component {
         this.runProposeFor(text, targetId);
     }
     handleApply (turn) {
+        // HARD GATE 0, no interleaving: a propose in flight owns `busy`. Applying on
+        // top of it would clear that flag on completion (the tail below is
+        // unconditional), re-opening the composer while the propose still runs, so a
+        // second request could go out and a second turn land. Refuse instead; the card
+        // button is disabled on `busy` so this is a backstop, not the only guard.
+        if (this.state.busy) return;
         // HARD GATE 1, single-flight: a synchronous instance flag so two Apply
         // clicks in the same tick call applyProposal only ONCE (a child mashing the
         // button must not double-inject).

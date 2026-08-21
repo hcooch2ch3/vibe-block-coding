@@ -112,6 +112,30 @@ describe('VibePrompt container', () => {
             expect(wrapper.instance().state.turns[0].status).toBe('applied');
         });
 
+        test('Apply is refused mid-request and never clears the in-flight busy flag', async () => {
+            // handleApply owns busy only when it set it. Clearing it unconditionally
+            // let an Apply that landed during a propose re-open the composer while the
+            // propose was still running, so a second request could go out.
+            const vm = makeVm({});
+            const applySpy = jest.spyOn(devConsole, 'applyProposal')
+                .mockImplementation(() => Promise.resolve({ok: true}));
+            const wrapper = render(vm);
+            const turn = {id: 3, role: 'ai', kind: 'proposal', status: 'pending', preview: makeProposal()};
+            wrapper.setState({turns: [turn], busy: true}); // a propose is in flight
+            wrapper.instance().handleApply(turn);
+            await flushPromises();
+            expect(applySpy).not.toHaveBeenCalled();
+            expect(wrapper.instance().state.busy).toBe(true);   // still in flight
+            expect(wrapper.instance().state.turns[0].status).toBe('pending'); // untouched
+        });
+
+        test('the proposal card is told when a request is in flight', () => {
+            const vm = makeVm({});
+            const wrapper = render(vm);
+            wrapper.setState({busy: true});
+            expect(wrapper.props().busy).toBe(true);
+        });
+
         test('glow is fail-open: a successful Apply stays "applied" even when the workspace is unavailable', async () => {
             const vm = makeVm({});
             jest.spyOn(devConsole, 'applyProposal')

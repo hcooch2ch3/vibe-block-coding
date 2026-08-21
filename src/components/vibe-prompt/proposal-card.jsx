@@ -31,7 +31,9 @@ const messages = defineMessages({
 // BlockPreview per changed script. `previews` is [{script, variant}], the caller
 // already dropped unchanged scripts and tagged each with added/updated. Named
 // export for shallow tests; default is intl-wrapped.
-const ProposalCard = function ({status, previews, removeCount, explanation, onApply, onIgnore, onRebuild, vm, intl}) {
+const ProposalCard = function (
+    {status, previews, removeCount, explanation, busy, onApply, onIgnore, onRebuild, vm, intl}
+) {
     return (
         <div className={classNames('proposal-card', styles.card)}>
             <div className={classNames('proposal-card__header', styles.header)}>
@@ -40,6 +42,7 @@ const ProposalCard = function ({status, previews, removeCount, explanation, onAp
                         <button
                             className={classNames('proposal-card__apply', styles.apply)}
                             type="button"
+                            disabled={busy}
                             onClick={onApply}
                         >
                             {intl.formatMessage(messages.apply)}
@@ -61,6 +64,7 @@ const ProposalCard = function ({status, previews, removeCount, explanation, onAp
                         <button
                             className={classNames('proposal-card__rebuild', styles.rebuild)}
                             type="button"
+                            disabled={busy}
                             onClick={onRebuild}
                         >
                             {intl.formatMessage(messages.rebuild)}
@@ -101,6 +105,7 @@ const ProposalCard = function ({status, previews, removeCount, explanation, onAp
 const noop = function () {};
 
 ProposalCard.propTypes = {
+    busy: PropTypes.bool,
     explanation: PropTypes.string,
     intl: intlShape.isRequired,
     onApply: PropTypes.func,
@@ -118,7 +123,7 @@ ProposalCard.propTypes = {
     vm: PropTypes.object
 };
 
-ProposalCard.defaultProps = {onApply: noop, onIgnore: noop, onRebuild: noop, removeCount: 0};
+ProposalCard.defaultProps = {busy: false, onApply: noop, onIgnore: noop, onRebuild: noop, removeCount: 0};
 
 export {ProposalCard};
 export default injectIntl(ProposalCard);

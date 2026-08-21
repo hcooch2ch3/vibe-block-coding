@@ -694,6 +694,7 @@ const VibePromptComponent = props => {
                     <HistoryList
                         turns={turns}
                         vm={vm}
+                        busy={busy}
                         onClearHistory={onClearHistory}
                         onApply={onApply}
                         onIgnore={onIgnore}

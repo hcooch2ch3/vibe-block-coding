@@ -21,6 +21,30 @@ test('pending: one header with Apply + Ignore, one BlockPreview per script', () 
     expect(onIgnore).toHaveBeenCalled();
 });
 
+test('busy disables the buttons that start work, but not Ignore', () => {
+    // Apply and Rebuild both kick off work the container refuses while a request is
+    // in flight. Leaving them enabled turns a refusal into a button that looks broken.
+    // Ignore is local bookkeeping and stays available.
+    const w = shallowWithIntl(
+        <ProposalCard status="pending" previews={previews} busy onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    expect(w.find('.proposal-card__apply').prop('disabled')).toBe(true);
+    expect(w.find('.proposal-card__ignore').prop('disabled')).toBeFalsy();
+
+    const stale = shallowWithIntl(
+        <ProposalCard status="stale" previews={previews} busy onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    expect(stale.find('.proposal-card__rebuild').prop('disabled')).toBe(true);
+});
+
+test('idle leaves every button enabled', () => {
+    const w = shallowWithIntl(
+        <ProposalCard status="pending" previews={previews} onApply={jest.fn()} onIgnore={jest.fn()} onRebuild={jest.fn()} />
+    );
+    expect(w.find('.proposal-card__apply').prop('disabled')).toBeFalsy();
+    expect(w.find('.proposal-card__ignore').prop('disabled')).toBeFalsy();
+});
+
 test('stale: shows Rebuild, not Apply; fires onRebuild; shows stale label', () => {
     const onRebuild = jest.fn();
     const w = shallowWithIntl(

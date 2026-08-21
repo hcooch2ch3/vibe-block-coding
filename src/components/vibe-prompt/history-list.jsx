@@ -43,12 +43,13 @@ class HistoryList extends React.Component {
         if (this.scrollRef) this.scrollRef.scrollTop = this.scrollRef.scrollHeight;
     }
     renderRow (turn) {
-        const {vm, onApply, onIgnore, onRebuild, onMakeIt} = this.props;
+        const {vm, busy, onApply, onIgnore, onRebuild, onMakeIt} = this.props;
         return (
             <HistoryRow
                 key={turn.id}
                 turn={turn}
                 vm={vm}
+                busy={busy}
                 onApply={onApply}
                 onIgnore={onIgnore}
                 onRebuild={onRebuild}
@@ -89,6 +90,7 @@ class HistoryList extends React.Component {
 const noop = function () {};
 
 HistoryList.propTypes = {
+    busy: PropTypes.bool,
     intl: intlShape.isRequired,
     onApply: PropTypes.func,
     onClearHistory: PropTypes.func,

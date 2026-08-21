@@ -44,7 +44,7 @@ class HistoryRow extends React.Component {
         this.props.onMakeIt(this.props.turn);
     }
     render () {
-        const {turn, intl, vm} = this.props;
+        const {turn, intl, vm, busy} = this.props;
         if (turn.role === 'user') {
             return (
                 <div className={classNames('vibe-bubble', 'vibe-bubble--user', styles.userBubble)}>
@@ -80,6 +80,7 @@ class HistoryRow extends React.Component {
                 removeCount={removeCount}
                 explanation={turn.text}
                 vm={vm}
+                busy={busy}
                 onApply={this.handleApply}
                 onIgnore={this.handleIgnore}
                 onRebuild={this.handleRebuild}
@@ -89,6 +90,7 @@ class HistoryRow extends React.Component {
 }
 
 HistoryRow.propTypes = {
+    busy: PropTypes.bool,
     intl: intlShape.isRequired,
     onApply: PropTypes.func,
     onIgnore: PropTypes.func,
