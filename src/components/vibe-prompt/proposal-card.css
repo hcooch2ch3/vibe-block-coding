@@ -33,8 +33,18 @@
     cursor: pointer;
 }
 
-.apply:hover {
+.apply:hover:not(:disabled) {
     background: #3373cc;
+}
+
+/* Apply and Rebuild are disabled while a request is in flight. Without this they
+   stay full-colour and read as tappable, so a child taps a live-looking button and
+   nothing happens, which is worse than the refusal it is meant to show. Mirrors
+   .gear:disabled in vibe-prompt.css. */
+.apply:disabled,
+.rebuild:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 .ignore {
@@ -62,7 +72,7 @@
     cursor: pointer;
 }
 
-.rebuild:hover {
+.rebuild:hover:not(:disabled) {
     background: #cc8800;
 }
 
